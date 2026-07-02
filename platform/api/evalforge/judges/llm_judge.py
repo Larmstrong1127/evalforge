@@ -12,6 +12,17 @@ from evalforge.providers.anthropic import AnthropicProvider
 
 _JUDGE_MODEL = "claude-sonnet-5"
 
+
+def _strip_markdown_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.split("\n")
+        lines = lines[1:]  # drop opening fence (with optional language tag)
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines)
+    return stripped.strip()
+
 _PROMPT_TEMPLATE = """You are an evaluation judge. Score the RESPONSE to the QUESTION \
 on a scale of 0.0 to 1.0.
 {expected_block}
@@ -38,7 +49,7 @@ class LlmJudge:
         )
         completion = await self._provider.generate(model=_JUDGE_MODEL, prompt=judge_prompt)
         try:
-            data = json.loads(completion.text)
+            data = json.loads(_strip_markdown_fence(completion.text))
             score = float(data["score"])
             justification = str(data["justification"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:

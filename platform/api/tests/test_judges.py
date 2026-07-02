@@ -6,6 +6,7 @@ from evalforge.config import Settings
 from evalforge.judges import get_judge
 from evalforge.judges.exact_match import ExactMatchJudge
 from evalforge.judges.llm_judge import LlmJudge
+from evalforge.providers import ProviderError
 
 SETTINGS = Settings(anthropic_api_key="test-key")
 
@@ -74,4 +75,54 @@ async def test_llm_judge_malformed_json_raises():
     )
     judge = LlmJudge(SETTINGS)
     with pytest.raises(ValueError):
+        await judge.score(prompt="q", expected="4", output="four")
+
+
+@respx.mock
+async def test_llm_judge_strips_markdown_fence():
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '```json\n{"score": 0.9, "justification": "good"}\n```',
+                    }
+                ],
+                "usage": {"input_tokens": 50, "output_tokens": 20},
+            },
+        )
+    )
+    judge = LlmJudge(SETTINGS)
+    judgment = await judge.score(prompt="q", expected="4", output="four")
+    assert judgment is not None
+    assert judgment.score == 0.9
+
+
+@respx.mock
+async def test_llm_judge_out_of_range_score_raises():
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "content": [
+                    {"type": "text", "text": '{"score": 1.5, "justification": "too high"}'}
+                ],
+                "usage": {"input_tokens": 50, "output_tokens": 20},
+            },
+        )
+    )
+    judge = LlmJudge(SETTINGS)
+    with pytest.raises(ValueError):
+        await judge.score(prompt="q", expected="4", output="four")
+
+
+@respx.mock
+async def test_llm_judge_provider_error_propagates_not_swallowed():
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(500, json={"error": {"message": "server error"}})
+    )
+    judge = LlmJudge(SETTINGS)
+    with pytest.raises(ProviderError):
         await judge.score(prompt="q", expected="4", output="four")
