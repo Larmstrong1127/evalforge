@@ -1,0 +1,163 @@
+"""Async eval runner.
+
+Design (ADR-001): plain asyncio, no Celery/Redis. An eval run is I/O-bound
+fan-out over provider APIs; a semaphore per run bounds concurrency, and the
+job state lives in the runs table. Per-result failures never fail the whole
+run — partial data is still data.
+"""
+import asyncio
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from evalforge.db.models import (
+    CandidateModel,
+    JudgeEvaluation,
+    PromptVersion,
+    Result,
+    ResultStatus,
+    Run,
+    RunStatus,
+)
+from evalforge.judges import Judge, Judgment
+from evalforge.pricing import cost_usd
+from evalforge.providers import Provider, ProviderError
+
+
+@dataclass
+class RunConfig:
+    providers: dict[str, Provider]
+    judges: list[Judge] = field(default_factory=list)
+    max_retries: int = 3
+    retry_base_delay: float = 1.0
+
+
+async def _latest_versions(session: AsyncSession, suite_id: object) -> list[PromptVersion]:
+    """Latest version of each prompt in the suite."""
+    rows = (
+        (
+            await session.execute(
+                select(PromptVersion)
+                .join(PromptVersion.prompt)
+                .where(PromptVersion.prompt.has(suite_id=suite_id))
+                .order_by(PromptVersion.prompt_id, PromptVersion.version_number.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    latest: dict[object, PromptVersion] = {}
+    for v in rows:
+        latest.setdefault(v.prompt_id, v)
+    return list(latest.values())
+
+
+async def _generate_with_retries(
+    provider: Provider, model: str, prompt: str, config: RunConfig
+) -> tuple[str, int, int, int, str | None]:
+    """Returns (text, input_tokens, output_tokens, latency_ms, error)."""
+    attempt = 0
+    while True:
+        start = asyncio.get_event_loop().time()
+        try:
+            completion = await provider.generate(model=model, prompt=prompt)
+            latency_ms = int((asyncio.get_event_loop().time() - start) * 1000)
+            return (
+                completion.text,
+                completion.input_tokens,
+                completion.output_tokens,
+                latency_ms,
+                None,
+            )
+        except ProviderError as exc:
+            if not exc.retryable or attempt >= config.max_retries:
+                return "", 0, 0, 0, str(exc)
+            await asyncio.sleep(config.retry_base_delay * (2**attempt))
+            attempt += 1
+
+
+async def _process_one(
+    session: AsyncSession,
+    run: Run,
+    version: PromptVersion,
+    candidate: CandidateModel,
+    config: RunConfig,
+    semaphore: asyncio.Semaphore,
+    lock: asyncio.Lock,
+) -> None:
+    async with semaphore:
+        provider = config.providers[candidate.provider]
+        text, tokens_in, tokens_out, latency_ms, error = await _generate_with_retries(
+            provider, candidate.name, version.input_text, config
+        )
+
+    judgments: list[tuple[Judge, Judgment]] = []
+    if not error:
+        for judge in config.judges:
+            judgment = await judge.score(
+                prompt=version.input_text,
+                expected=version.expected_output,
+                output=text,
+            )
+            if judgment is not None:
+                judgments.append((judge, judgment))
+
+    # ORM object construction mutates shared relationship collections (e.g.
+    # run.results via backref), so it must happen under the same lock as the
+    # commit — constructing concurrently with another task's flush/commit
+    # triggers SQLAlchemy's "collection append during flush" race.
+    async with lock:  # AsyncSession is not concurrency-safe
+        result = Result(
+            run=run,
+            prompt_version=version,
+            candidate_model=candidate,
+            status=ResultStatus.FAILED if error else ResultStatus.OK,
+            generated_text=text,
+            error=error,
+            latency_ms=latency_ms,
+            input_tokens=tokens_in,
+            output_tokens=tokens_out,
+            cost_usd=cost_usd(candidate.name, tokens_in, tokens_out),
+        )
+        evaluations = [
+            JudgeEvaluation(
+                result=result,
+                judge_name=judge.name,
+                score=judgment.score,
+                justification=judgment.justification,
+            )
+            for judge, judgment in judgments
+        ]
+        session.add(result)
+        session.add_all(evaluations)
+        run.completed_steps += 1
+        await session.commit()
+
+
+async def execute_run(
+    session: AsyncSession, run: Run, candidates: list[CandidateModel], config: RunConfig
+) -> None:
+    versions = await _latest_versions(session, run.suite_id)
+    run.total_steps = len(versions) * len(candidates)
+    run.status = RunStatus.RUNNING
+    run.started_at = datetime.now(UTC)
+    await session.commit()
+
+    semaphore = asyncio.Semaphore(run.concurrency_limit)
+    lock = asyncio.Lock()
+    tasks = [
+        _process_one(session, run, version, candidate, config, semaphore, lock)
+        for version in versions
+        for candidate in candidates
+    ]
+    try:
+        await asyncio.gather(*tasks)
+        run.status = RunStatus.COMPLETED
+    except Exception:
+        run.status = RunStatus.FAILED
+        raise
+    finally:
+        run.finished_at = datetime.now(UTC)
+        await session.commit()
