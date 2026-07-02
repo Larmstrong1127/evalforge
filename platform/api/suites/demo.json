@@ -1,0 +1,9 @@
+{
+  "name": "demo-qa",
+  "description": "Tiny factual QA suite for smoke-testing the engine",
+  "prompts": [
+    {"input_text": "What is the capital of France? Answer with the city name only.", "expected_output": "Paris"},
+    {"input_text": "What is 7 * 8? Answer with the number only.", "expected_output": "56"},
+    {"input_text": "What year did the Apollo 11 moon landing happen? Answer with the year only.", "expected_output": "1969"}
+  ]
+}
