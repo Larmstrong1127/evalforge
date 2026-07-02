@@ -157,22 +157,44 @@ async def _process_one(
         # block is exited via exception, so by the time we're in this except
         # clause the lock is guaranteed to be free — acquiring it again here
         # is always safe and never double-acquires.
-        async with lock:
-            result = Result(
-                run=run,
-                prompt_version=version,
-                candidate_model=candidate,
-                status=ResultStatus.FAILED,
-                generated_text="",
-                error=str(exc)[:500],
-                latency_ms=0,
-                input_tokens=0,
-                output_tokens=0,
-                cost_usd=0.0,
-            )
-            session.add(result)
-            run.completed_steps += 1
-            await session.commit()
+        try:
+            async with lock:
+                # If the happy-path commit above raised (DB constraint,
+                # serialization failure, etc.), the session is left in a
+                # failed-transaction/pending-rollback state. Roll it back
+                # before touching it again, otherwise the fallback commit
+                # below will itself raise on a poisoned session.
+                #
+                # rollback() expires every ORM object in the session,
+                # including `run`. A plain `run.completed_steps += 1`
+                # after that would trigger an implicit (unawaited) lazy
+                # refresh outside of any SQLAlchemy-awaited call, which
+                # raises MissingGreenlet. Explicitly await a refresh first
+                # so `run`'s attributes are safe to read/mutate again.
+                await session.rollback()
+                await session.refresh(run)
+                result = Result(
+                    run=run,
+                    prompt_version=version,
+                    candidate_model=candidate,
+                    status=ResultStatus.FAILED,
+                    generated_text="",
+                    error=str(exc)[:500],
+                    latency_ms=0,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                )
+                session.add(result)
+                run.completed_steps += 1
+                await session.commit()
+        except Exception:
+            # Even the fallback commit failed (session unrecoverable for
+            # this item). Roll back again so sibling tasks sharing this
+            # session aren't left poisoned, and give up recording this one
+            # result rather than crashing the whole run.
+            async with lock:
+                await session.rollback()
 
 
 async def execute_run(

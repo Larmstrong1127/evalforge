@@ -163,3 +163,56 @@ async def test_unexpected_provider_exception_does_not_fail_run(session):
     assert all("boom" in (r.error or "") for r in results)
     assert run.status is RunStatus.COMPLETED
     assert run.completed_steps == 3
+
+
+async def test_commit_failure_is_rolled_back_and_does_not_fail_run(session, monkeypatch):
+    """A commit() raising mid-run must not crash the run.
+
+    Uses a single prompt/candidate (one _process_one task) so the scenario
+    stays isolated to the exact gap being closed: the happy-path commit
+    inside `async with lock:` raises, leaving the session in a poisoned
+    (pending-rollback) state, and the outer `except Exception` block must
+    roll it back before the fallback commit, or the fallback commit will
+    itself raise and escape _process_one, crashing asyncio.gather.
+
+    (With multiple concurrent tasks sharing one AsyncSession, a rollback
+    from one task's failure also discards any *other* tasks' uncommitted
+    pending objects — a pre-existing, documented tradeoff of the
+    single-shared-session design (see module docstring), not something
+    this fix is meant to solve. Keeping this test single-task avoids
+    conflating the two concerns.)
+    """
+    run, model, versions = await make_fixture(session, n_prompts=1)
+    provider = FakeProvider()
+    config = RunConfig(providers={"fake": provider}, judges=[], max_retries=0)
+
+    original_commit = session.commit
+    original_rollback = session.rollback
+    commit_calls = {"count": 0}
+    rollback_calls = {"count": 0}
+
+    async def flaky_commit():
+        commit_calls["count"] += 1
+        # The 1st commit is execute_run's pre-fan-out setup commit; let it
+        # through. Fail the 2nd commit overall — the happy-path commit
+        # inside _process_one's `async with lock:` block — exactly once.
+        if commit_calls["count"] == 2:
+            raise RuntimeError("simulated db error")
+        await original_commit()
+
+    async def counting_rollback():
+        rollback_calls["count"] += 1
+        await original_rollback()
+
+    monkeypatch.setattr(session, "commit", flaky_commit)
+    monkeypatch.setattr(session, "rollback", counting_rollback)
+
+    await execute_run(session, run, [model], config)
+
+    results = (await session.execute(select(Result))).scalars().all()
+    assert run.status is RunStatus.COMPLETED
+    assert len(results) == 1
+    # The item whose first commit failed should still land a FAILED Result
+    # via the fallback path, after a rollback cleared the poisoned session.
+    assert results[0].status is ResultStatus.FAILED
+    assert rollback_calls["count"] >= 1
