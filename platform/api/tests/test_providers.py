@@ -128,3 +128,38 @@ async def test_gemini_generate():
     completion = await provider.generate(model="gemini-2.0-flash", prompt="What is 2+2?")
     assert completion.text == "4"
     assert completion.input_tokens == 12
+
+
+@respx.mock
+async def test_gemini_empty_candidates_raises_provider_error():
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ).mock(return_value=httpx.Response(200, json={"candidates": []}))
+    provider = GeminiProvider(SETTINGS)
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.generate(model="gemini-2.0-flash", prompt="q")
+    assert excinfo.value.retryable is False
+
+
+@respx.mock
+async def test_anthropic_missing_usage_raises_provider_error():
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200, json={"content": [{"type": "text", "text": "hi"}]}
+        )
+    )
+    provider = AnthropicProvider(SETTINGS)
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.generate(model="claude-sonnet-5", prompt="q")
+    assert excinfo.value.retryable is False
+
+
+@respx.mock
+async def test_openai_empty_choices_raises_provider_error():
+    respx.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": []})
+    )
+    provider = OpenAIProvider(SETTINGS)
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.generate(model="gpt-4o-mini", prompt="q")
+    assert excinfo.value.retryable is False

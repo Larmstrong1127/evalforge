@@ -36,9 +36,16 @@ class AnthropicProvider:
             except httpx.TransportError as exc:
                 raise ProviderError(f"anthropic transport error: {exc}") from exc
         data = response.json()
-        text = "".join(block["text"] for block in data["content"] if block["type"] == "text")
-        return Completion(
-            text=text,
-            input_tokens=data["usage"]["input_tokens"],
-            output_tokens=data["usage"]["output_tokens"],
-        )
+        try:
+            text = "".join(
+                block["text"] for block in data["content"] if block["type"] == "text"
+            )
+            return Completion(
+                text=text,
+                input_tokens=data["usage"]["input_tokens"],
+                output_tokens=data["usage"]["output_tokens"],
+            )
+        except (KeyError, IndexError) as exc:
+            raise ProviderError(
+                f"anthropic returned unexpected response shape: {exc}", retryable=False
+            ) from exc

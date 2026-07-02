@@ -32,8 +32,13 @@ class OpenAIProvider:
             except httpx.TransportError as exc:
                 raise ProviderError(f"openai transport error: {exc}") from exc
         data = response.json()
-        return Completion(
-            text=data["choices"][0]["message"]["content"] or "",
-            input_tokens=data["usage"]["prompt_tokens"],
-            output_tokens=data["usage"]["completion_tokens"],
-        )
+        try:
+            return Completion(
+                text=data["choices"][0]["message"]["content"] or "",
+                input_tokens=data["usage"]["prompt_tokens"],
+                output_tokens=data["usage"]["completion_tokens"],
+            )
+        except (KeyError, IndexError) as exc:
+            raise ProviderError(
+                f"openai returned unexpected response shape: {exc}", retryable=False
+            ) from exc

@@ -33,10 +33,15 @@ class GeminiProvider:
             except httpx.TransportError as exc:
                 raise ProviderError(f"gemini transport error: {exc}") from exc
         data = response.json()
-        parts = data["candidates"][0]["content"]["parts"]
-        usage = data.get("usageMetadata", {})
-        return Completion(
-            text="".join(p.get("text", "") for p in parts),
-            input_tokens=usage.get("promptTokenCount", 0),
-            output_tokens=usage.get("candidatesTokenCount", 0),
-        )
+        try:
+            parts = data["candidates"][0]["content"]["parts"]
+            usage = data.get("usageMetadata", {})
+            return Completion(
+                text="".join(p.get("text", "") for p in parts),
+                input_tokens=usage.get("promptTokenCount", 0),
+                output_tokens=usage.get("candidatesTokenCount", 0),
+            )
+        except (KeyError, IndexError) as exc:
+            raise ProviderError(
+                f"gemini returned unexpected response shape: {exc}", retryable=False
+            ) from exc
