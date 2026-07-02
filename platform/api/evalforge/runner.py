@@ -3,7 +3,9 @@
 Design (ADR-001): plain asyncio, no Celery/Redis. An eval run is I/O-bound
 fan-out over provider APIs; a semaphore per run bounds concurrency, and the
 job state lives in the runs table. Per-result failures never fail the whole
-run — partial data is still data.
+run — partial data is still data. Interrupted runs (process killed mid-flight)
+are not resumed — completed_steps/status stay wherever they were left; this
+is an accepted v1 tradeoff of the asyncio-not-Celery design (ADR-001).
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -60,10 +62,10 @@ async def _generate_with_retries(
     """Returns (text, input_tokens, output_tokens, latency_ms, error)."""
     attempt = 0
     while True:
-        start = asyncio.get_event_loop().time()
+        start = asyncio.get_running_loop().time()
         try:
             completion = await provider.generate(model=model, prompt=prompt)
-            latency_ms = int((asyncio.get_event_loop().time() - start) * 1000)
+            latency_ms = int((asyncio.get_running_loop().time() - start) * 1000)
             return (
                 completion.text,
                 completion.input_tokens,
@@ -96,11 +98,16 @@ async def _process_one(
     judgments: list[tuple[Judge, Judgment]] = []
     if not error:
         for judge in config.judges:
-            judgment = await judge.score(
-                prompt=version.input_text,
-                expected=version.expected_output,
-                output=text,
-            )
+            try:
+                judgment = await judge.score(
+                    prompt=version.input_text,
+                    expected=version.expected_output,
+                    output=text,
+                )
+            except Exception:
+                # A misbehaving judge must not fail the whole run or drop the
+                # underlying Result — just skip recording this judge's evaluation.
+                continue
             if judgment is not None:
                 judgments.append((judge, judgment))
 

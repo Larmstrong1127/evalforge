@@ -63,6 +63,13 @@ async def make_fixture(session, n_prompts: int = 4):
     return run, model, versions
 
 
+class ExplodingJudge:
+    name = "exploding_judge"
+
+    async def score(self, prompt: str, expected: str | None, output: str) -> Judgment | None:
+        raise RuntimeError("judge blew up")
+
+
 async def test_run_produces_results_and_evaluations(session):
     run, model, versions = await make_fixture(session)
     provider = FakeProvider()
@@ -109,3 +116,28 @@ async def test_exhausted_retries_mark_result_failed_not_run(session):
     assert all(r.status is ResultStatus.FAILED for r in results)
     assert all("transient" in (r.error or "") for r in results)
     assert run.status is RunStatus.COMPLETED  # partial failure ≠ run failure
+
+
+async def test_judge_exception_does_not_fail_run_or_drop_results(session):
+    run, model, versions = await make_fixture(session, n_prompts=3)
+    provider = FakeProvider()
+    config = RunConfig(providers={"fake": provider}, judges=[ExplodingJudge()], max_retries=0)
+    await execute_run(session, run, [model], config)
+
+    results = (await session.execute(select(Result))).scalars().all()
+    evals = (await session.execute(select(JudgeEvaluation))).scalars().all()
+    assert len(results) == 3
+    assert all(r.status is ResultStatus.OK for r in results)
+    assert len(evals) == 0  # judge failed for every item, no evaluations recorded
+    assert run.status is RunStatus.COMPLETED
+    assert run.completed_steps == 3
+
+
+async def test_retries_exhaust_at_exactly_max_retries_plus_one_attempts(session):
+    run, model, _ = await make_fixture(session, n_prompts=1)
+    provider = FakeProvider(fail_times=100)  # always fails
+    config = RunConfig(
+        providers={"fake": provider}, judges=[], max_retries=2, retry_base_delay=0.0
+    )
+    await execute_run(session, run, [model], config)
+    assert provider.calls == 3  # initial attempt (0) + 2 retries = 3 total calls
