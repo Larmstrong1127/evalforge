@@ -89,58 +89,90 @@ async def _process_one(
     semaphore: asyncio.Semaphore,
     lock: asyncio.Lock,
 ) -> None:
-    async with semaphore:
-        provider = config.providers[candidate.provider]
-        text, tokens_in, tokens_out, latency_ms, error = await _generate_with_retries(
-            provider, candidate.name, version.input_text, config
-        )
-
-    judgments: list[tuple[Judge, Judgment]] = []
-    if not error:
-        for judge in config.judges:
-            try:
-                judgment = await judge.score(
-                    prompt=version.input_text,
-                    expected=version.expected_output,
-                    output=text,
-                )
-            except Exception:
-                # A misbehaving judge must not fail the whole run or drop the
-                # underlying Result — just skip recording this judge's evaluation.
-                continue
-            if judgment is not None:
-                judgments.append((judge, judgment))
-
-    # ORM object construction mutates shared relationship collections (e.g.
-    # run.results via backref), so it must happen under the same lock as the
-    # commit — constructing concurrently with another task's flush/commit
-    # triggers SQLAlchemy's "collection append during flush" race.
-    async with lock:  # AsyncSession is not concurrency-safe
-        result = Result(
-            run=run,
-            prompt_version=version,
-            candidate_model=candidate,
-            status=ResultStatus.FAILED if error else ResultStatus.OK,
-            generated_text=text,
-            error=error,
-            latency_ms=latency_ms,
-            input_tokens=tokens_in,
-            output_tokens=tokens_out,
-            cost_usd=cost_usd(candidate.name, tokens_in, tokens_out),
-        )
-        evaluations = [
-            JudgeEvaluation(
-                result=result,
-                judge_name=judge.name,
-                score=judgment.score,
-                justification=judgment.justification,
+    try:
+        async with semaphore:
+            provider = config.providers[candidate.provider]
+            text, tokens_in, tokens_out, latency_ms, error = await _generate_with_retries(
+                provider, candidate.name, version.input_text, config
             )
-            for judge, judgment in judgments
-        ]
-        session.add(result)
-        session.add_all(evaluations)
-        run.completed_steps += 1
-        await session.commit()
+
+        judgments: list[tuple[Judge, Judgment]] = []
+        if not error:
+            for judge in config.judges:
+                try:
+                    judgment = await judge.score(
+                        prompt=version.input_text,
+                        expected=version.expected_output,
+                        output=text,
+                    )
+                except Exception:
+                    # A misbehaving judge must not fail the whole run or drop the
+                    # underlying Result — just skip recording this judge's evaluation.
+                    continue
+                if judgment is not None:
+                    judgments.append((judge, judgment))
+
+        # ORM object construction mutates shared relationship collections (e.g.
+        # run.results via backref), so it must happen under the same lock as the
+        # commit — constructing concurrently with another task's flush/commit
+        # triggers SQLAlchemy's "collection append during flush" race.
+        async with lock:  # AsyncSession is not concurrency-safe
+            result = Result(
+                run=run,
+                prompt_version=version,
+                candidate_model=candidate,
+                status=ResultStatus.FAILED if error else ResultStatus.OK,
+                generated_text=text,
+                error=error,
+                latency_ms=latency_ms,
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                cost_usd=cost_usd(candidate.name, tokens_in, tokens_out),
+            )
+            evaluations = [
+                JudgeEvaluation(
+                    result=result,
+                    judge_name=judge.name,
+                    score=judgment.score,
+                    justification=judgment.justification,
+                )
+                for judge, judgment in judgments
+            ]
+            session.add(result)
+            session.add_all(evaluations)
+            run.completed_steps += 1
+            await session.commit()
+    except Exception as exc:
+        # Safety net: anything unexpected that slips past the fine-grained
+        # handling above (unregistered provider, a non-ProviderError bug in a
+        # provider, a pricing lookup blowing up, an ORM construction error,
+        # etc.) must still yield exactly one FAILED Result for this item and
+        # must never propagate out of _process_one — a single item failing
+        # must never fail the whole run (see module docstring).
+        #
+        # We don't know whether `lock` is already held at the point the
+        # exception was raised (e.g. cost_usd() can raise from inside the
+        # `async with lock:` block above), so re-entering it here would
+        # deadlock. asyncio.Lock releases automatically when its `async with`
+        # block is exited via exception, so by the time we're in this except
+        # clause the lock is guaranteed to be free — acquiring it again here
+        # is always safe and never double-acquires.
+        async with lock:
+            result = Result(
+                run=run,
+                prompt_version=version,
+                candidate_model=candidate,
+                status=ResultStatus.FAILED,
+                generated_text="",
+                error=str(exc)[:500],
+                latency_ms=0,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+            )
+            session.add(result)
+            run.completed_steps += 1
+            await session.commit()
 
 
 async def execute_run(

@@ -141,3 +141,25 @@ async def test_retries_exhaust_at_exactly_max_retries_plus_one_attempts(session)
     )
     await execute_run(session, run, [model], config)
     assert provider.calls == 3  # initial attempt (0) + 2 retries = 3 total calls
+
+
+class ExplodingProvider:
+    name = "exploding"
+
+    async def generate(self, model: str, prompt: str) -> Completion:
+        raise ValueError("boom - not a ProviderError")
+
+
+async def test_unexpected_provider_exception_does_not_fail_run(session):
+    run, model, versions = await make_fixture(session, n_prompts=3)
+    model.provider = "exploding"
+    provider = ExplodingProvider()
+    config = RunConfig(providers={"exploding": provider}, judges=[], max_retries=0)
+    await execute_run(session, run, [model], config)
+
+    results = (await session.execute(select(Result))).scalars().all()
+    assert len(results) == 3
+    assert all(r.status is ResultStatus.FAILED for r in results)
+    assert all("boom" in (r.error or "") for r in results)
+    assert run.status is RunStatus.COMPLETED
+    assert run.completed_steps == 3
