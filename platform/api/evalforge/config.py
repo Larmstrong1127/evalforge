@@ -1,3 +1,4 @@
+"""Application settings loaded from EVALFORGE_-prefixed env vars or .env."""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

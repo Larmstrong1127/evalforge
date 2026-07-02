@@ -83,8 +83,12 @@ class CandidateModel(TimestampedBase):
 
 class Run(TimestampedBase):
     __tablename__ = "runs"
+    # No ondelete=CASCADE: deleting a suite must never silently destroy run/result history.
     suite_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("suites.id"))
-    status: Mapped[RunStatus] = mapped_column(Enum(RunStatus), default=RunStatus.QUEUED)
+    status: Mapped[RunStatus] = mapped_column(
+        Enum(RunStatus, values_callable=lambda e: [m.value for m in e]),
+        default=RunStatus.QUEUED,
+    )
     concurrency_limit: Mapped[int] = mapped_column(Integer, default=3)
     completed_steps: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
@@ -97,9 +101,13 @@ class Run(TimestampedBase):
 class Result(TimestampedBase):
     __tablename__ = "results"
     run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
+    # No ondelete=CASCADE on these FKs: deleting a prompt version or candidate
+    # model must never silently destroy result history.
     prompt_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("prompt_versions.id"))
     candidate_model_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidate_models.id"))
-    status: Mapped[ResultStatus] = mapped_column(Enum(ResultStatus))
+    status: Mapped[ResultStatus] = mapped_column(
+        Enum(ResultStatus, values_callable=lambda e: [m.value for m in e])
+    )
     generated_text: Mapped[str] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text, default=None)
     latency_ms: Mapped[int] = mapped_column(Integer)

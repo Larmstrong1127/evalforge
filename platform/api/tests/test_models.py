@@ -1,6 +1,8 @@
 import uuid
 
+import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from evalforge.db.models import (
     CandidateModel,
@@ -83,6 +85,16 @@ async def test_failed_result_records_error(session):
     fetched = (await session.execute(select(Result))).scalar_one()
     assert fetched.status is ResultStatus.FAILED
     assert "429" in fetched.error
+
+
+async def test_duplicate_version_number_rejected(session):
+    suite = Suite(name="s")
+    prompt = Prompt(suite=suite)
+    v1 = PromptVersion(prompt=prompt, version_number=1, input_text="a")
+    dup = PromptVersion(prompt=prompt, version_number=1, input_text="b")
+    session.add_all([suite, prompt, v1, dup])
+    with pytest.raises(IntegrityError):
+        await session.commit()
 
 
 async def test_ids_are_uuids(session):

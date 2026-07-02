@@ -16,6 +16,8 @@ from evalforge.db.models import Base
 
 
 def make_engine(settings: Settings) -> AsyncEngine:
+    # File-based SQLite serializes concurrent writes (fine for dev); Postgres
+    # is the concurrent-write path.
     return create_async_engine(settings.database_url)
 
 
