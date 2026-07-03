@@ -105,18 +105,29 @@ def _strip_markdown_fence(text: str) -> str:
 
 
 async def score_with_llm_judge(
-    examples, provider_name: str, model_name: str, settings: Settings
+    examples,
+    provider_name: str,
+    model_name: str,
+    settings: Settings,
+    request_delay_s: float = 0.5,
+    max_retries: int = 4,
+    retry_base_delay_s: float = 2.0,
 ) -> BenchmarkResult:
     """Real implementation: uses evalforge.providers to score each example,
     parsing a strict-JSON faithful/hallucinated verdict from the response.
 
     This hits real paid APIs one example at a time with no checkpointing, so a
-    single failed example must not lose all prior progress and spent cost. Any
-    example that fails (provider error, malformed/non-JSON response, or a
-    missing "label" field) is skipped with a printed warning rather than
-    raising — as a result, the returned BenchmarkResult may contain fewer
-    entries than len(examples).
+    single failed example must not lose all prior progress and spent cost. A
+    retryable ProviderError (e.g. HTTP 429) is retried with exponential
+    backoff up to max_retries before being treated as a real failure; a small
+    fixed delay between every request (request_delay_s) additionally avoids
+    bursting past rate limits in the first place rather than reacting only
+    after they're hit. Any example that still fails after retries (a
+    non-retryable provider error, or a malformed/non-JSON response) is
+    skipped with a printed warning rather than raising — as a result, the
+    returned BenchmarkResult may contain fewer entries than len(examples).
     """
+    import asyncio
     import json
     import time
 
@@ -134,15 +145,34 @@ async def score_with_llm_judge(
             f"CONTEXT: {ex.context}\nQUESTION: {ex.question}\nANSWER: {ex.answer}\n"
             'Reply with strict JSON only: {"label": "faithful"} or {"label": "hallucinated"}'
         )
-        start = time.perf_counter()
+        attempt = 0
+        completion = None
+        while True:
+            start = time.perf_counter()
+            try:
+                completion = await provider.generate(model=model_name, prompt=prompt)
+                break
+            except ProviderError as exc:
+                if not exc.retryable or attempt >= max_retries:
+                    print(f"warning: failed to score example, skipping: {exc}")
+                    break
+                await asyncio.sleep(retry_base_delay_s * (2**attempt))
+                attempt += 1
+
+        if request_delay_s:
+            await asyncio.sleep(request_delay_s)
+
+        if completion is None:
+            continue
+
+        latency_ms = (time.perf_counter() - start) * 1000
         try:
-            completion = await provider.generate(model=model_name, prompt=prompt)
-            latency_ms = (time.perf_counter() - start) * 1000
             data = json.loads(_strip_markdown_fence(completion.text))
             label = data["label"]
-        except (ProviderError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
             print(f"warning: failed to score example, skipping: {exc}")
             continue
+
         predictions.append(1 if label == "hallucinated" else 0)
         costs_usd.append(cost_usd(model_name, completion.input_tokens, completion.output_tokens))
         latencies_ms.append(latency_ms)
