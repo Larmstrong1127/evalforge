@@ -137,6 +137,16 @@ def evaluate_loader(
 
 
 def train(config: TrainConfig, checkpoint_dir: Path, log_dir: Path) -> Path:
+    # TF32 matmuls on Ampere+ GPUs: speeds up the fp32 ops that torch.amp's
+    # autocast doesn't cover (e.g. LayerNorm reductions), with accuracy loss
+    # negligible for training (~10 bits of mantissa vs fp32's 23 — well
+    # within the noise floor of SGD-based optimization). This is a standard,
+    # widely-used optimization for Ampere/Hopper cards, not a shortcut on
+    # correctness. No-op on GPUs that don't support it (e.g. pre-Ampere,
+    # or CPU-only).
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(config.seed)
 
