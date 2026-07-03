@@ -3,6 +3,12 @@ name = "evalforge-training"
 version = "0.1.0"
 description = "Fine-tunes a local hallucination-detection judge for EvalForge"
 requires-python = ">=3.11"
+# GPU setup: a plain `pip install -e ".[dev]"` pulls the CPU-only torch wheel
+# from PyPI and silently trains on CPU (extremely slow, and the CPU autocast
+# path in this torch version has a real dtype bug under DebertaV2's
+# LayerNorm). After installing, reinstall torch for your CUDA version:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126 --upgrade
+# Verify with: python -c "import torch; print(torch.cuda.is_available())"
 dependencies = [
     "torch>=2.3",
     "transformers>=4.42",
