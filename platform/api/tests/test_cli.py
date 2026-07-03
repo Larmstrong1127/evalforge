@@ -64,3 +64,18 @@ def test_run_rejects_unknown_judge(tmp_path, monkeypatch):
     assert "Traceback" not in result.output
     assert "unknown judge" in result.output
     assert "bogus_judge" in result.output
+
+
+def test_results_rejects_invalid_run_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVALFORGE_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/t.db")
+    result = runner.invoke(app, ["results", "not-a-uuid"])
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "not a valid run id" in result.output
+
+
+def test_results_accepts_valid_uuid_with_no_matches(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVALFORGE_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/t.db")
+    result = runner.invoke(app, ["results", "00000000-0000-0000-0000-000000000000"])
+    assert result.exit_code == 0
+    assert "Traceback" not in result.output

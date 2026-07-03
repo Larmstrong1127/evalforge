@@ -1,6 +1,7 @@
 """CLI entry point: create suites, run evals, inspect results."""
 import asyncio
 import json
+import uuid
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -155,6 +156,11 @@ def run_eval(
 @app.command("results")
 def show_results(run_id: str) -> None:
     """Show scored results for a run."""
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        typer.echo(f"error: '{run_id}' is not a valid run id", err=True)
+        raise typer.Exit(code=1) from None
 
     async def _show() -> None:
         settings = Settings()
@@ -163,7 +169,7 @@ def show_results(run_id: str) -> None:
         factory = make_session_factory(engine)
         async with factory() as session:
             results = (
-                await session.execute(select(Result).where(Result.run_id == run_id))
+                await session.execute(select(Result).where(Result.run_id == run_uuid))
             ).scalars().all()
             for r in results:
                 evals = (
