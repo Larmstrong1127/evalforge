@@ -3,19 +3,21 @@ from training.data.ragtruth import load_ragtruth_examples
 
 
 def fake_load_fn(*args, **kwargs):
-    """Stands in for datasets.load_dataset — returns raw RAGTruth-shaped rows."""
+    """Stands in for datasets.load_dataset — returns raw RAGTruth-shaped rows,
+    matching the real wandb/RAGTruth-processed schema (verified 2026-07-02):
+    hallucination_labels is a JSON-ENCODED STRING, not a real list."""
     return [
         {
-            "source_info": "The Eiffel Tower is located in Paris, France.",
-            "prompt": "Where is the Eiffel Tower?",
-            "response": "The Eiffel Tower is in Paris.",
-            "labels": [],  # no hallucination spans -> faithful
+            "context": "The Eiffel Tower is located in Paris, France.",
+            "query": "Where is the Eiffel Tower?",
+            "output": "The Eiffel Tower is in Paris.",
+            "hallucination_labels": "[]",  # no hallucination spans -> faithful
         },
         {
-            "source_info": "The Eiffel Tower is located in Paris, France.",
-            "prompt": "Where is the Eiffel Tower?",
-            "response": "The Eiffel Tower is in Berlin.",
-            "labels": [{"label_type": "Evident Conflict"}],  # has hallucination spans
+            "context": "The Eiffel Tower is located in Paris, France.",
+            "query": "Where is the Eiffel Tower?",
+            "output": "The Eiffel Tower is in Berlin.",
+            "hallucination_labels": '[{"label_type": "Evident Conflict"}]',  # has spans
         },
     ]
 
@@ -37,3 +39,23 @@ def test_load_ragtruth_maps_fields_correctly():
     assert examples[0].question == "Where is the Eiffel Tower?"
     assert examples[0].answer == "The Eiffel Tower is in Paris."
     assert "Eiffel Tower" in examples[0].context
+
+
+def test_load_ragtruth_does_not_treat_empty_json_string_as_truthy():
+    """Regression test: hallucination_labels is a JSON string, and Python's
+    bool("[]") is True (non-empty string) even though the parsed list is
+    empty. Every row must be correctly labeled faithful if the parsed JSON
+    is an empty list, not mislabeled hallucinated by raw string truthiness."""
+
+    def only_empty_string_fn(*args, **kwargs):
+        return [
+            {
+                "context": "c",
+                "query": "q",
+                "output": "a",
+                "hallucination_labels": "[]",
+            }
+        ]
+
+    examples = load_ragtruth_examples(load_fn=only_empty_string_fn)
+    assert examples[0].label == 0
