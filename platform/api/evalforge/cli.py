@@ -119,7 +119,11 @@ def run_eval(
                 if not model_name:
                     typer.echo(f"error: candidate '{spec}' must be provider:model", err=True)
                     raise typer.Exit(code=1)
-                providers[provider_name] = get_provider(provider_name, settings)
+                try:
+                    providers[provider_name] = get_provider(provider_name, settings)
+                except KeyError:
+                    typer.echo(f"error: unknown provider '{provider_name}'", err=True)
+                    raise typer.Exit(code=1) from None
                 candidates.append(CandidateModel(name=model_name, provider=provider_name))
             session.add_all(candidates)
 
@@ -127,9 +131,16 @@ def run_eval(
             session.add(run)
             await session.commit()
 
+            judges = []
+            for name in judge:
+                try:
+                    judges.append(get_judge(name, settings))
+                except KeyError:
+                    typer.echo(f"error: unknown judge '{name}'", err=True)
+                    raise typer.Exit(code=1) from None
             config = RunConfig(
                 providers=providers,
-                judges=[get_judge(name, settings) for name in judge],
+                judges=judges,
             )
             typer.echo(f"run {run.id} started ({len(candidate)} candidates)")
             await execute_run(session, run, candidates, config)
@@ -148,6 +159,7 @@ def show_results(run_id: str) -> None:
     async def _show() -> None:
         settings = Settings()
         engine = make_engine(settings)
+        await init_db(engine)
         factory = make_session_factory(engine)
         async with factory() as session:
             results = (

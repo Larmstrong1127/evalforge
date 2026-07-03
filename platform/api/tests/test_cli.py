@@ -31,3 +31,36 @@ def test_suite_create_rejects_missing_file(tmp_path, monkeypatch):
     monkeypatch.setenv("EVALFORGE_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/t.db")
     result = runner.invoke(app, ["suite", "create", str(tmp_path / "nope.json")])
     assert result.exit_code != 0
+
+
+def _create_suite(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVALFORGE_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path}/t.db")
+    suite_file = tmp_path / "suite.json"
+    suite_file.write_text(
+        json.dumps(
+            {
+                "name": "cli-test",
+                "prompts": [{"input_text": "q1", "expected_output": "a1"}],
+            }
+        )
+    )
+    result = runner.invoke(app, ["suite", "create", str(suite_file)])
+    assert result.exit_code == 0
+
+
+def test_run_rejects_unknown_provider(tmp_path, monkeypatch):
+    _create_suite(tmp_path, monkeypatch)
+    result = runner.invoke(app, ["run", "cli-test", "-c", "bogus:model"])
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "unknown provider" in result.output
+    assert "bogus" in result.output
+
+
+def test_run_rejects_unknown_judge(tmp_path, monkeypatch):
+    _create_suite(tmp_path, monkeypatch)
+    result = runner.invoke(app, ["run", "cli-test", "-c", "ollama:x", "-j", "bogus_judge"])
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "unknown judge" in result.output
+    assert "bogus_judge" in result.output
