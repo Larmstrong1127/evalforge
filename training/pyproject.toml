@@ -40,5 +40,10 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12, not 3.11 (see requires-python above): numpy's shipped .pyi stubs use
+# PEP 695 `type` statement syntax, which mypy can only parse when its
+# python_version target is 3.12+, regardless of the language version our own
+# code targets. This is a stub-parsing requirement, not a relaxation of the
+# package's actual >=3.11 support.
+python_version = "3.12"
 ignore_missing_imports = true
