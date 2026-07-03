@@ -17,7 +17,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
-from transformers import get_linear_schedule_with_warmup
+from transformers import DataCollatorWithPadding, get_linear_schedule_with_warmup
 
 from training.config import TrainConfig, load_config
 from training.data.prepare import Example, load_halueval_examples, split_train_val
@@ -70,6 +70,20 @@ def run_training_steps(
 
 
 class ExampleDataset(Dataset):
+    """Tokenizes with truncation but WITHOUT padding — padding happens
+    per-batch via DataCollatorWithPadding instead (see `_make_loader`).
+
+    DeBERTa's disentangled attention computes content-to-position AND
+    position-to-content matrices in addition to standard content-to-content
+    attention, making it substantially more memory-hungry than plain BERT at
+    a given sequence length. Padding every example to a fixed `max_length`
+    regardless of its actual length (most HaluEval examples are far shorter
+    than 512 tokens) wastes enormous activation memory and was the direct
+    cause of a real CUDA OOM at batch_size=64/max_length=512 on a 24GB GPU
+    during the first live training run. Dynamic per-batch padding (each
+    batch padded only to its own longest example) is the standard fix.
+    """
+
     def __init__(self, examples: list[Example], tokenizer, max_length: int):
         self.examples = examples
         self.tokenizer = tokenizer
@@ -85,14 +99,23 @@ class ExampleDataset(Dataset):
             text,
             truncation=True,
             max_length=self.max_length,
-            padding="max_length",
-            return_tensors="pt",
         )
         return {
-            "input_ids": encoding["input_ids"].squeeze(0),
-            "attention_mask": encoding["attention_mask"].squeeze(0),
-            "labels": torch.tensor(ex.label, dtype=torch.long),
+            "input_ids": encoding["input_ids"],
+            "attention_mask": encoding["attention_mask"],
+            "labels": ex.label,
         }
+
+
+def _make_loader(
+    examples: list[Example], tokenizer, max_length: int, batch_size: int, shuffle: bool
+) -> DataLoader:
+    return DataLoader(
+        ExampleDataset(examples, tokenizer, max_length),
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=DataCollatorWithPadding(tokenizer, return_tensors="pt"),
+    )
 
 
 def evaluate_loader(
@@ -122,14 +145,11 @@ def train(config: TrainConfig, checkpoint_dir: Path, log_dir: Path) -> Path:
 
     all_examples = load_halueval_examples()
     train_examples, val_examples = split_train_val(all_examples, val_ratio=0.1, seed=config.seed)
-    train_loader = DataLoader(
-        ExampleDataset(train_examples, tokenizer, config.max_length),
-        batch_size=config.batch_size,
-        shuffle=True,
+    train_loader = _make_loader(
+        train_examples, tokenizer, config.max_length, config.batch_size, shuffle=True
     )
-    val_loader = DataLoader(
-        ExampleDataset(val_examples, tokenizer, config.max_length),
-        batch_size=config.batch_size,
+    val_loader = _make_loader(
+        val_examples, tokenizer, config.max_length, config.batch_size, shuffle=False
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
