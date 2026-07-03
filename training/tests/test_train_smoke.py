@@ -23,3 +23,28 @@ def test_loss_is_finite_and_decreases_over_steps():
     first_half = sum(losses[:5]) / 5
     second_half = sum(losses[5:]) / 5
     assert second_half <= first_half + 0.5  # generous margin; 10 steps is noisy
+
+
+def test_run_training_steps_accepts_a_lazy_iterable_not_just_a_list():
+    """batches must accept any Iterable[dict] (e.g. a DataLoader), not just a
+    materialized list — this guards against re-introducing the per-epoch
+    list-comprehension that defeated DataLoader's lazy prefetching."""
+    torch.manual_seed(42)
+    model = make_tiny_model_and_tokenizer()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+    def batch_generator():
+        for _ in range(3):
+            yield make_synthetic_batch(batch_size=4, seq_len=8)
+
+    losses = run_training_steps(
+        model=model,
+        optimizer=optimizer,
+        batches=batch_generator(),
+        device=torch.device("cpu"),
+        max_grad_norm=1.0,
+        use_amp=False,
+    )
+
+    assert len(losses) == 3
+    assert all(torch.isfinite(torch.tensor(loss)) for loss in losses)

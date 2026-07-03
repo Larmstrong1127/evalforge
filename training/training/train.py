@@ -11,6 +11,7 @@ accepted v1 tradeoff; there is no checkpoint-of-optimizer-state resumption,
 only the best-validation-F1 model weights are saved.
 """
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
 
 import torch
@@ -20,14 +21,14 @@ from transformers import get_linear_schedule_with_warmup
 
 from training.config import TrainConfig, load_config
 from training.data.prepare import Example, load_halueval_examples, split_train_val
-from training.metrics import compute_classification_metrics
+from training.metrics import ClassificationMetrics, compute_classification_metrics
 from training.models.classifier import build_model, build_tokenizer
 
 
 def run_training_steps(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
-    batches: list[dict],
+    batches: Iterable[dict],
     device: torch.device,
     max_grad_norm: float,
     use_amp: bool,
@@ -94,7 +95,9 @@ class ExampleDataset(Dataset):
         }
 
 
-def evaluate_loader(model: torch.nn.Module, loader: DataLoader, device: torch.device):
+def evaluate_loader(
+    model: torch.nn.Module, loader: DataLoader, device: torch.device
+) -> ClassificationMetrics:
     """Returns a training.metrics.ClassificationMetrics (dataclass, not dict)."""
     model.eval()
     y_true: list[int] = []
@@ -130,6 +133,9 @@ def train(config: TrainConfig, checkpoint_dir: Path, log_dir: Path) -> Path:
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
+    # Scheduler is built for the full max_epochs run. If early stopping fires
+    # before max_epochs, the LR schedule will not reach its planned decay
+    # endpoint — accepted v1 simplification, not a bug.
     total_steps = len(train_loader) * config.max_epochs
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
@@ -138,21 +144,14 @@ def train(config: TrainConfig, checkpoint_dir: Path, log_dir: Path) -> Path:
     )
 
     writer = SummaryWriter(log_dir=str(log_dir / config.experiment_name))
-    checkpoint_path = checkpoint_dir / f"{config.experiment_name}_best.pt"
+    checkpoint_path = checkpoint_dir / config.experiment_name
     best_f1 = 0.0
     epochs_without_improvement = 0
+    checkpoint_saved = False
 
     for epoch in range(config.max_epochs):
-        batches = [
-            {
-                "input_ids": b["input_ids"],
-                "attention_mask": b["attention_mask"],
-                "labels": b["labels"],
-            }
-            for b in train_loader
-        ]
         losses = run_training_steps(
-            model, optimizer, batches, device, config.max_grad_norm, config.use_amp, scheduler
+            model, optimizer, train_loader, device, config.max_grad_norm, config.use_amp, scheduler
         )
         train_loss = sum(losses) / len(losses)
         val_metrics = evaluate_loader(model, val_loader, device)
@@ -166,14 +165,22 @@ def train(config: TrainConfig, checkpoint_dir: Path, log_dir: Path) -> Path:
             best_f1 = val_metrics.f1
             epochs_without_improvement = 0
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            model.save_pretrained(checkpoint_dir / config.experiment_name)
-            tokenizer.save_pretrained(checkpoint_dir / config.experiment_name)
+            model.save_pretrained(checkpoint_path)
+            tokenizer.save_pretrained(checkpoint_path)
+            checkpoint_saved = True
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= config.early_stopping_patience:
                 break
 
     writer.close()
+
+    if not checkpoint_saved:
+        raise RuntimeError(
+            "training completed but validation F1 never improved past 0.0 — "
+            "no checkpoint was saved"
+        )
+
     return checkpoint_path
 
 
