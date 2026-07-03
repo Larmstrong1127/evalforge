@@ -48,6 +48,23 @@ def test_aggregate_computes_cost_per_1k():
     assert result["claude-sonnet-5"]["cost_per_1k_usd"] == pytest.approx(2.0)
 
 
+def test_aggregate_p95_latency_is_95th_percentile():
+    # 100 ascending latencies [0.0, 1.0, ..., 99.0]. The true 95th percentile
+    # value is the 95th-smallest value, i.e. sorted_latencies[94] == 94.0.
+    latencies_ms = [float(i) for i in range(100)]
+    result = aggregate_benchmark_results(
+        ground_truth=[0] * 100,
+        judges={
+            "judge": BenchmarkResult(
+                predictions=[0] * 100,
+                costs_usd=[0.0] * 100,
+                latencies_ms=latencies_ms,
+            ),
+        },
+    )
+    assert result["judge"]["p95_latency_ms"] == pytest.approx(94.0)
+
+
 def test_aggregate_rejects_mismatched_lengths():
     with pytest.raises(ValueError):
         aggregate_benchmark_results(
