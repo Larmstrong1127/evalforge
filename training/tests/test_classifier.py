@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import torch
+
 from training.models.classifier import build_model, build_tokenizer
 
 LABEL_NAMES = {0: "faithful", 1: "hallucinated"}
@@ -14,6 +16,7 @@ def test_build_model_requests_two_labels_with_names(mock_cls):
         num_labels=2,
         id2label=LABEL_NAMES,
         label2id={"faithful": 0, "hallucinated": 1},
+        torch_dtype=torch.float32,
     )
 
 
