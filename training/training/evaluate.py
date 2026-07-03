@@ -26,7 +26,11 @@ class EvaluationResult:
 
 
 def _score_examples(
-    model, tokenizer, examples: list[Example], device: torch.device
+    model,
+    tokenizer,
+    examples: list[Example],
+    device: torch.device,
+    max_length: int = 512,
 ) -> EvaluationResult:
     model.to(device)
     model.eval()
@@ -38,7 +42,7 @@ def _score_examples(
     with torch.no_grad():
         for ex in examples:
             text = f"Q: {ex.question} C: {ex.context} A: {ex.answer}"
-            inputs = tokenizer(text, truncation=True, max_length=512, return_tensors="pt")
+            inputs = tokenizer(text, truncation=True, max_length=max_length, return_tensors="pt")
             inputs = {k: v.to(device) for k, v in inputs.items()}
             logits = model(**inputs).logits
             probs = torch.softmax(logits, dim=-1).squeeze(0)
@@ -61,7 +65,9 @@ def _score_examples(
     )
 
 
-def evaluate_checkpoint(checkpoint_path: str, val_examples: list[Example]) -> dict:
+def evaluate_checkpoint(
+    checkpoint_path: str, val_examples: list[Example], max_length: int = 512
+) -> dict:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = build_tokenizer(checkpoint_path)
     model = AutoModelForSequenceClassification.from_pretrained(checkpoint_path)
@@ -69,8 +75,12 @@ def evaluate_checkpoint(checkpoint_path: str, val_examples: list[Example]) -> di
     ragtruth_examples = load_ragtruth_examples()
 
     return {
-        "in_distribution": _score_examples(model, tokenizer, val_examples, device),
-        "out_of_distribution": _score_examples(model, tokenizer, ragtruth_examples, device),
+        "in_distribution": _score_examples(
+            model, tokenizer, val_examples, device, max_length=max_length
+        ),
+        "out_of_distribution": _score_examples(
+            model, tokenizer, ragtruth_examples, device, max_length=max_length
+        ),
     }
 
 
@@ -78,6 +88,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, required=True)
     args = parser.parse_args()
+
+    if not args.checkpoint.exists():
+        raise SystemExit(f"error: checkpoint not found: {args.checkpoint}")
 
     all_examples = load_halueval_examples()
     _, val_examples = split_train_val(all_examples, val_ratio=0.1, seed=42)
