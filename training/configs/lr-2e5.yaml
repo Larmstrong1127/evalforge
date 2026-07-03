@@ -1,7 +1,14 @@
 experiment_name: lr-2e5
 model_name: microsoft/deberta-v3-base
+# batch_size reduced from 64 -> 32 (2026-07-02, ADR): with dynamic per-batch
+# padding, batch=64 measured at 23.9-24.0 GB on this 24GB card for
+# average-length batches — essentially zero headroom. Since batch
+# composition is randomly shuffled each epoch, a batch that happens to draw
+# several longer-than-average examples pushed past the ceiling mid-run
+# (CUDA OOM after 2 successful epochs). 32 leaves real margin for that
+# length variance.
 max_length: 512
-batch_size: 64
+batch_size: 32
 learning_rate: 0.00002
 warmup_ratio: 0.1
 max_grad_norm: 1.0
