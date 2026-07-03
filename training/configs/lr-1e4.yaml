@@ -1,0 +1,11 @@
+experiment_name: lr-1e4
+model_name: microsoft/deberta-v3-base
+max_length: 512
+batch_size: 64
+learning_rate: 0.0001
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+max_epochs: 6
+early_stopping_patience: 2
+use_amp: true
+seed: 42
