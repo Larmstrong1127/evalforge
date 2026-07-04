@@ -13,6 +13,7 @@ from evalforge.db.session import _engine
 async def lifespan(app: FastAPI):
     await init_db(_engine)
     yield
+    await _engine.dispose()
 
 
 app = FastAPI(title="EvalForge API", version="0.1.0", lifespan=lifespan)
