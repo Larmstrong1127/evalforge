@@ -23,7 +23,8 @@ platform/api/evalforge/
     session.py             # NEW: get_session() FastAPI dependency (per-request AsyncSession)
   api/
     __init__.py
-    suites.py              # POST /suites, POST /suites/{id}/prompts, GET /suites
+    suites.py              # POST /suites, GET /suites, POST /suites/{id}/prompts
+    prompts.py               # POST /prompts/{prompt_id}/versions
     runs.py                 # POST /runs, GET /runs/{id}, GET /runs/{id}/results, GET /runs/{id}/costs
     ratings.py                # POST /ratings
     compare.py                 # GET /compare
@@ -59,9 +60,25 @@ just wraps the same `make_session_factory()` in a request-scoped generator.
    instead of exit codes).
 4. Creates `CandidateModel` rows, a `Run` row (status=QUEUED), commits.
 5. Returns `202 Accepted` with `{"run_id": ...}` immediately.
-6. Hands `execute_run(session, run, candidates, config)` to FastAPI's
-   `BackgroundTasks`, which runs it as an asyncio task after the response is
-   sent — no new infrastructure, consistent with ADR-001 (asyncio, not
+6. Hands a wrapper coroutine to FastAPI's `BackgroundTasks`, passing only
+   `run_id` and `candidate_ids` (plain values, not the request's ORM
+   objects or its `AsyncSession`). **The background task must open its own
+   session via `make_session_factory()` and re-fetch the `Run`/
+   `CandidateModel` rows inside it** — it must never reuse the request-scoped
+   session from the `get_session` dependency. That session is torn down as
+   part of the request/response lifecycle, and `BackgroundTasks` run after
+   the response is sent; sharing it is a well-documented FastAPI anti-pattern
+   that produces a closed-session or detached-instance error the first time
+   the background task touches the ORM objects. The wrapper also wraps the
+   call in try/except purely to `logging.exception(...)` anything that
+   escapes — not to change behavior, since `execute_run()` already sets
+   `run.status = RunStatus.FAILED` and commits before re-raising (see
+   `runner.py`'s own try/except/finally). Without this catch, an unhandled
+   exception in a `BackgroundTask` is swallowed by Starlette with only an
+   ASGI-server-level log line, which is easy to miss — the DB state is
+   already correct by that point, but the failure should still be visible
+   in the API server's own logs.
+7. No new infrastructure beyond this, consistent with ADR-001 (asyncio, not
    Celery). If the server process restarts mid-run, that run is orphaned in
    RUNNING state — an already-accepted v1 limitation (see `runner.py`'s own
    docstring on interrupted runs not being resumed).
@@ -89,10 +106,21 @@ class SuiteResponse(BaseModel):
     prompt_count: int
 ```
 
-**`POST /api/v1/suites/{id}/prompts`** — body: single `PromptCreate`;
-appends a new `PromptVersion` (version_number = max existing + 1) to an
-existing `Prompt`, or creates a new `Prompt` if `prompt_id` isn't supplied.
-Response: the created version as `{"prompt_id": UUID, "version_number": int}`.
+**`POST /api/v1/suites/{id}/prompts`** — body: `PromptCreate` (no id fields).
+Strictly creates a new `Prompt` under suite `{id}` and its initial
+`PromptVersion` (version_number=1). Response:
+`{"prompt_id": UUID, "version_number": 1}`.
+
+**`POST /api/v1/prompts/{prompt_id}/versions`** — body: `PromptCreate`.
+Strictly appends a new `PromptVersion` (version_number = max existing + 1)
+to the existing prompt `{prompt_id}`; 404 if it doesn't exist. Response:
+`{"prompt_id": UUID, "version_number": int}`.
+
+Splitting create-prompt and add-version into two routes (rather than one
+route that branches on whether an optional `prompt_id` is present in the
+body) keeps both request schemas strict and the routing unambiguous — a
+caller never has to know an implicit branching rule to know which entity
+they're creating.
 
 **`GET /api/v1/suites`** — response: `list[SuiteResponse]`.
 
@@ -121,7 +149,12 @@ class RunStatusResponse(BaseModel):
 404 if the run doesn't exist.
 
 **`GET /api/v1/runs/{id}/results`** (optional query params: `judge_name`,
-`status` for filtering — direct WHERE clauses, no new logic)
+`status` for filtering — direct WHERE clauses, no new logic; `limit: int =
+Query(default=1000, le=5000)` as a hard cap, not full pagination — a run
+with hundreds of prompts across several candidates can otherwise return
+thousands of deep JSON objects each carrying a full `generated_text` blob,
+easily multiple MB, which is a real risk to the eventual dashboard tab even
+without needing full offset/cursor pagination to guard against it)
 ```python
 class JudgeEvaluationResponse(BaseModel):
     judge_name: str
@@ -168,7 +201,12 @@ This endpoint only records a vote — pair *selection* (which two results to
 show next) is dashboard-side logic against `GET /runs/{id}/results`, not a
 backend concern; nothing here presumes how the dashboard picks pairs.
 
-**`GET /api/v1/compare?runs={a},{b}`**
+**`GET /api/v1/compare?run_id={a}&run_id={b}`** — repeated query parameter
+(`run_id: list[UUID] = Query(...)`, exactly 2 required), not a single
+comma-joined string. FastAPI parses and validates this natively as a list
+of UUIDs; a manual comma-split has to handle its own malformed-input cases
+(stray whitespace, wrong count, invalid UUID text) that `Query(...)` already
+handles for free.
 ```python
 class CompareRow(BaseModel):
     prompt_version_id: UUID
