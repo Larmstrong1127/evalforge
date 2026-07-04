@@ -39,15 +39,12 @@ async def create_suite(
 async def list_suites(
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> list[SuiteResponse]:
-    suites = (await session.execute(select(Suite))).scalars().all()
-    result = []
-    for s in suites:
-        count = (
-            await session.execute(
-                select(func.count(Prompt.id)).where(Prompt.suite_id == s.id)
-            )
-        ).scalar_one()
-        result.append(
-            SuiteResponse(id=s.id, name=s.name, description=s.description, prompt_count=count)
-        )
-    return result
+    rows = await session.execute(
+        select(Suite, func.count(Prompt.id))
+        .outerjoin(Prompt, Prompt.suite_id == Suite.id)
+        .group_by(Suite.id)
+    )
+    return [
+        SuiteResponse(id=s.id, name=s.name, description=s.description, prompt_count=count)
+        for s, count in rows.all()
+    ]
