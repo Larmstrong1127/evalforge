@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from evalforge.api import compare, prompts, ratings, runs, suites
-from evalforge.db.session import _engine
 from evalforge.db.engine import init_db
+from evalforge.db.session import _engine
 
 
 @asynccontextmanager
