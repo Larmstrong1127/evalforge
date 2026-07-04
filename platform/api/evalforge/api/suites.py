@@ -1,9 +1,8 @@
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from evalforge.api.params import parse_uuid_or_404
 from evalforge.db.models import Prompt, PromptVersion, Suite
 from evalforge.db.session import get_session
 from evalforge.schemas.prompts import PromptVersionResponse
@@ -61,10 +60,7 @@ async def list_suites(
 async def create_prompt(
     suite_id: str, body: PromptCreate, session: AsyncSession = Depends(get_session)  # noqa: B008
 ) -> PromptVersionResponse:
-    try:
-        suite_uuid = uuid.UUID(suite_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=f"suite {suite_id} not found") from exc
+    suite_uuid = parse_uuid_or_404(suite_id, "suite")
     suite = await session.get(Suite, suite_uuid)
     if suite is None:
         raise HTTPException(status_code=404, detail=f"suite {suite_id} not found")
