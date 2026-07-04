@@ -1,0 +1,30 @@
+{
+  "local-deberta-lr2e5": {
+    "agreement": 0.475,
+    "total_cost_usd": 0.0,
+    "cost_per_1k_usd": 0.0,
+    "p50_latency_ms": 26.714299998275237,
+    "p95_latency_ms": 32.881600000109756
+  },
+  "claude-sonnet-5": {
+    "agreement": 0.85,
+    "total_cost_usd": 0.811077,
+    "cost_per_1k_usd": 4.055385,
+    "p50_latency_ms": 1465.6638000014937,
+    "p95_latency_ms": 2920.695100001467
+  },
+  "gpt-4o": {
+    "agreement": 0.825,
+    "total_cost_usd": 0.405592,
+    "cost_per_1k_usd": 2.02796,
+    "p50_latency_ms": 1311.1701000001403,
+    "p95_latency_ms": 1765.7721000000492
+  },
+  "gemini-2.5-flash-lite": {
+    "agreement": 0.785,
+    "total_cost_usd": 0.016523,
+    "cost_per_1k_usd": 0.082615,
+    "p50_latency_ms": 1181.9032500002322,
+    "p95_latency_ms": 2557.818100000077
+  }
+}
