@@ -1,6 +1,12 @@
-import pytest
+import asyncio
 
-from evalforge.db.models import Prompt, PromptVersion, Suite
+import httpx
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from evalforge.db.engine import make_session_factory
+from evalforge.db.models import Base, Prompt, PromptVersion, Suite
+from evalforge.db.session import get_session
 from evalforge.providers import Completion
 
 
@@ -99,3 +105,71 @@ async def test_get_run_status_returns_run_fields(api_client, session, patch_fake
 async def test_get_missing_run_returns_404(api_client):
     response = await api_client.get("/api/v1/runs/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
+
+
+async def test_create_run_row_is_visible_to_background_task_with_separate_engines(
+    tmp_path, monkeypatch
+):
+    """Regression test for a real bug caught via a live E2E run against
+    Ollama: BackgroundTasks execute before get_session's post-yield commit
+    (both run inside the same ASGI middleware layer that later closes the
+    dependency's AsyncExitStack), so a flush()-only Run row was invisible to
+    the background task's independently-opened session. Every other test in
+    this file monkeypatches _make_background_session_factory to share the
+    SAME in-memory engine as the request, which masks this exact bug — this
+    test deliberately uses two genuinely separate engines against the same
+    file-backed SQLite database, mirroring production."""
+    import evalforge.api.runs as runs_module
+    from evalforge.main import app
+
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'regression.db'}"
+    monkeypatch.setenv("EVALFORGE_DATABASE_URL", db_url)
+
+    request_engine = create_async_engine(db_url)
+    async with request_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    request_factory = make_session_factory(request_engine)
+
+    def _fake_get_provider(name: str, settings):
+        if name != "fake":
+            raise KeyError(name)
+        return FakeProvider()
+
+    monkeypatch.setattr(runs_module, "get_provider", _fake_get_provider)
+    # Deliberately NOT monkeypatching _make_background_session_factory: it
+    # opens its own real engine via Settings().database_url, which now
+    # points at the same file thanks to the env var set above.
+
+    async def _override_get_session():
+        async with request_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    app.dependency_overrides[get_session] = _override_get_session
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            async with request_factory() as session:
+                suite = await _make_suite_with_prompt(session)
+            response = await client.post(
+                "/api/v1/runs",
+                json={"suite_id": str(suite.id), "candidates": ["fake:model-a"], "judges": []},
+            )
+            assert response.status_code == 202
+            run_id = response.json()["run_id"]
+
+            status_body = {"status": "queued"}
+            for _ in range(20):
+                status_response = await client.get(f"/api/v1/runs/{run_id}")
+                status_body = status_response.json()
+                if status_body["status"] != "queued":
+                    break
+                await asyncio.sleep(0.05)
+            assert status_body["status"] == "completed"
+    finally:
+        app.dependency_overrides.clear()
+        await request_engine.dispose()
