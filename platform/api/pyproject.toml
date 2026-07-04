@@ -21,6 +21,10 @@ dev = [
     "mypy>=1.10",
 ]
 postgres = ["asyncpg>=0.29"]
+# Optional: the local DeBERTa hallucination judge (evalforge.judges.deberta_judge).
+# Kept out of the base dependency set so the core async platform stays
+# lightweight for users who only need the cloud judges / providers.
+deberta = ["torch>=2.3", "transformers>=4.42"]
 
 [project.scripts]
 evalforge = "evalforge.cli:app"
@@ -44,5 +48,17 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12, not 3.11 (see requires-python above): once the optional `deberta`
+# extra is installed, numpy's shipped .pyi stubs (a transitive dependency of
+# torch/transformers) use PEP 695 `type` statement syntax, which mypy can
+# only parse when its python_version target is 3.12+, regardless of the
+# language version our own code targets. Same fix as training/pyproject.toml.
+python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+# torch/transformers are an optional extra (see [project.optional-dependencies]
+# deberta) and won't be installed in every environment that runs mypy against
+# this package; don't fail strict-mode checking on missing stubs for them.
+module = "evalforge.judges.deberta_judge"
+ignore_missing_imports = true

@@ -30,4 +30,12 @@ def get_judge(name: str, settings: Settings) -> Judge:
         "exact_match": ExactMatchJudge,
         "llm_judge": LlmJudge,
     }
+    if name == "deberta-hallucination":
+        # Imported only on request: this judge's module needs the optional
+        # `deberta` extra (torch/transformers) installed, which most users
+        # of this platform won't have — importing it eagerly alongside the
+        # other judges would break `get_judge` for everyone else.
+        from evalforge.judges.deberta_judge import DebertaJudge
+
+        return DebertaJudge(settings)
     return registry[name](settings)  # type: ignore[no-any-return]
