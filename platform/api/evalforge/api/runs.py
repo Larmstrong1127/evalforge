@@ -118,7 +118,16 @@ async def create_run(
 
     run = Run(suite=suite, status=RunStatus.QUEUED, concurrency_limit=body.concurrency)
     session.add(run)
-    await session.flush()
+    # Must be commit(), not flush(): BackgroundTasks execute inside the same
+    # ASGI middleware layer that later closes the get_session dependency's
+    # AsyncExitStack, so the dependency's post-yield commit runs AFTER the
+    # background task has already started — a flush()-only row is visible
+    # only within this session's own uncommitted transaction, and the
+    # background task's freshly-opened session sees nothing. Confirmed via a
+    # real end-to-end run against local Ollama (this bug does not reproduce
+    # under the mocked test suite, since tests intentionally share one
+    # session_factory between the request and the "background task").
+    await session.commit()
 
     candidate_ids = [str(c.id) for c in candidates]
     background_tasks.add_task(_run_in_background, str(run.id), candidate_ids, body.judges)
