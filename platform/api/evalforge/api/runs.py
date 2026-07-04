@@ -89,6 +89,7 @@ async def create_run(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> RunAccepted:
+    settings = Settings()
     suite = await session.get(Suite, body.suite_id)
     if suite is None:
         raise HTTPException(status_code=404, detail=f"suite {body.suite_id} not found")
@@ -101,7 +102,7 @@ async def create_run(
                 status_code=400, detail=f"candidate '{spec}' must be provider:model"
             )
         try:
-            get_provider(provider_name, Settings())
+            get_provider(provider_name, settings)
         except KeyError as exc:
             raise HTTPException(
                 status_code=400, detail=f"unknown provider '{provider_name}'"
@@ -111,7 +112,7 @@ async def create_run(
 
     for name in body.judges:
         try:
-            get_judge(name, Settings())
+            get_judge(name, settings)
         except KeyError as exc:
             raise HTTPException(status_code=400, detail=f"unknown judge '{name}'") from exc
 
@@ -163,7 +164,19 @@ async def get_run_results(
     query = query.limit(limit)
     results = (await session.execute(query)).scalars().all()
 
-    responses = []
+    candidate_ids = {r.candidate_model_id for r in results}
+    candidates_by_id = {
+        c.id: c
+        for c in (
+            await session.execute(
+                select(CandidateModel).where(CandidateModel.id.in_(candidate_ids))
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    responses: list[ResultResponse] = []
     for r in results:
         evals_query = select(JudgeEvaluation).where(JudgeEvaluation.result_id == r.id)
         if judge_name is not None:
@@ -171,8 +184,7 @@ async def get_run_results(
         evals = (await session.execute(evals_query)).scalars().all()
         if judge_name is not None and not evals:
             continue
-        candidate = await session.get(CandidateModel, r.candidate_model_id)
-        assert candidate is not None  # candidate_model_id is a non-nullable FK
+        candidate = candidates_by_id[r.candidate_model_id]
         responses.append(
             ResultResponse(
                 id=r.id,
@@ -201,22 +213,40 @@ async def get_run_costs(run_id: str, session: AsyncSession = Depends(get_session
     if run is None:
         raise HTTPException(status_code=404, detail=f"run {run_id} not found")
 
-    results = (
-        await session.execute(select(Result).where(Result.run_id == run_uuid))
-    ).scalars().all()
+    rows = (
+        await session.execute(
+            select(
+                Result.candidate_model_id,
+                Result.cost_usd,
+                Result.input_tokens,
+                Result.output_tokens,
+            ).where(Result.run_id == run_uuid)
+        )
+    ).all()
+
+    candidate_ids = {row.candidate_model_id for row in rows}
+    candidates_by_id = {
+        c.id: c
+        for c in (
+            await session.execute(
+                select(CandidateModel).where(CandidateModel.id.in_(candidate_ids))
+            )
+        )
+        .scalars()
+        .all()
+    }
 
     by_candidate: dict[str, float] = {}
     total_cost = 0.0
     total_in = 0
     total_out = 0
-    for r in results:
-        candidate = await session.get(CandidateModel, r.candidate_model_id)
-        assert candidate is not None  # candidate_model_id is a non-nullable FK
+    for row in rows:
+        candidate = candidates_by_id[row.candidate_model_id]
         key = f"{candidate.provider}:{candidate.name}"
-        by_candidate[key] = by_candidate.get(key, 0.0) + r.cost_usd
-        total_cost += r.cost_usd
-        total_in += r.input_tokens
-        total_out += r.output_tokens
+        by_candidate[key] = by_candidate.get(key, 0.0) + row.cost_usd
+        total_cost += row.cost_usd
+        total_in += row.input_tokens
+        total_out += row.output_tokens
 
     return CostResponse(
         total_cost_usd=total_cost,
