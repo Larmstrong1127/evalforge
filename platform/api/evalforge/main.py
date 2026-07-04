@@ -1,4 +1,5 @@
 """FastAPI app entry point. Run with: uvicorn evalforge.main:app --reload"""
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,7 +11,7 @@ from evalforge.db.session import _engine
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db(_engine)
     yield
     await _engine.dispose()
