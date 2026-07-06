@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -28,9 +29,9 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <nav className="border-b border-gray-200 px-6 py-4">
-            <a href="/suites" className="font-semibold text-lg">
+            <Link href="/suites" className="font-semibold text-lg">
               EvalForge
-            </a>
+            </Link>
           </nav>
           <main className="p-6">{children}</main>
         </Providers>

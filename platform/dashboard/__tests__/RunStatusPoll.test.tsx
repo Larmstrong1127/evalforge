@@ -33,7 +33,7 @@ describe("RunStatusPoll", () => {
   });
 
   it("calls onTerminal and stops polling once status is completed", async () => {
-    const spy = vi.spyOn(api, "getRunStatus").mockResolvedValue({
+    vi.spyOn(api, "getRunStatus").mockResolvedValue({
       id: "run-1",
       status: "completed",
       completed_steps: 3,
