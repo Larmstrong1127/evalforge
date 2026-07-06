@@ -27,7 +27,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new ApiError(response.status, body.detail ?? response.statusText);
+    // FastAPI's 422 validation errors return `detail` as an array of error
+    // objects, not a string — normalize so ApiError.message is always readable.
+    const detail =
+      typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail ?? response.statusText);
+    throw new ApiError(response.status, detail);
   }
   return response.json() as Promise<T>;
 }
