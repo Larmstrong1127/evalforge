@@ -63,4 +63,12 @@ describe("RunStatusPoll", () => {
 
     await waitFor(() => expect(screen.getByText(/failed/i)).toBeInTheDocument());
   });
+
+  it("renders an inline error message when the status fetch fails", async () => {
+    vi.spyOn(api, "getRunStatus").mockRejectedValue(new Error("run not found"));
+
+    renderWithClient(<RunStatusPoll runId="run-1" onTerminal={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText(/run not found/i)).toBeInTheDocument());
+  });
 });

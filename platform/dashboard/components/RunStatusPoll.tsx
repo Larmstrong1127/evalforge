@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRunStatus } from "@/lib/api";
 import type { RunStatus } from "@/lib/types";
@@ -30,8 +30,15 @@ export function RunStatusPoll({
     },
   });
 
+  // Guards against onTerminal firing more than once: refetchInterval only
+  // stops the interval trigger, not other TanStack Query refetch triggers
+  // (e.g. refetchOnWindowFocus, on by default). A refetch after the run is
+  // already terminal returns a new `data` object even with the same status,
+  // which would otherwise re-run this effect and call onTerminal again.
+  const hasFiredTerminal = useRef(false);
   useEffect(() => {
-    if (data && TERMINAL_STATUSES.includes(data.status)) {
+    if (data && TERMINAL_STATUSES.includes(data.status) && !hasFiredTerminal.current) {
+      hasFiredTerminal.current = true;
       onTerminal();
     }
   }, [data, onTerminal]);
@@ -49,7 +56,7 @@ export function RunStatusPoll({
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" role="status" aria-live="polite">
       <span className={`rounded-full px-3 py-1 text-sm font-medium ${BADGE_STYLES[data.status]}`}>
         {data.status}
       </span>
