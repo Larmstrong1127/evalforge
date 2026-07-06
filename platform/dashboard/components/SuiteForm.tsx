@@ -15,6 +15,7 @@ export function SuiteForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
     setSubmitting(true);
     const prompts: PromptCreate[] = promptsText
@@ -38,8 +39,11 @@ export function SuiteForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
       <div>
-        <label className="block text-sm font-medium">Name</label>
+        <label htmlFor="suite-name" className="block text-sm font-medium">
+          Name
+        </label>
         <input
+          id="suite-name"
           className="mt-1 block w-full rounded border border-gray-300 px-3 py-2"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -47,16 +51,22 @@ export function SuiteForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium">Description</label>
+        <label htmlFor="suite-description" className="block text-sm font-medium">
+          Description
+        </label>
         <input
+          id="suite-description"
           className="mt-1 block w-full rounded border border-gray-300 px-3 py-2"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
       <div>
-        <label className="block text-sm font-medium">Prompts (one per line)</label>
+        <label htmlFor="suite-prompts" className="block text-sm font-medium">
+          Prompts (one per line)
+        </label>
         <textarea
+          id="suite-prompts"
           className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 h-32"
           value={promptsText}
           onChange={(e) => setPromptsText(e.target.value)}
