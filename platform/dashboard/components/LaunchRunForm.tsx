@@ -16,14 +16,21 @@ export function LaunchRunForm({ suiteId }: { suiteId: string }) {
     e.preventDefault();
     if (submitting) return;
     setError(null);
+
+    const parsedCandidates = candidates
+      .split(",")
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+    if (parsedCandidates.length === 0) {
+      setError("Enter at least one candidate (provider:model).");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { run_id } = await createRun({
         suite_id: suiteId,
-        candidates: candidates
-          .split(",")
-          .map((c) => c.trim())
-          .filter((c) => c.length > 0),
+        candidates: parsedCandidates,
         judges: judges
           .split(",")
           .map((j) => j.trim())
@@ -64,17 +71,21 @@ export function LaunchRunForm({ suiteId }: { suiteId: string }) {
       </div>
       <div>
         <label htmlFor="run-concurrency" className="block text-sm font-medium">
-          Concurrency
+          Concurrency (1–20)
         </label>
         <input
           id="run-concurrency"
           type="number"
           min={1}
           max={20}
+          aria-describedby="run-concurrency-hint"
           className="mt-1 block w-24 rounded border border-gray-300 px-3 py-2"
           value={concurrency}
           onChange={(e) => setConcurrency(Number(e.target.value))}
         />
+        <p id="run-concurrency-hint" className="mt-1 text-xs text-gray-500">
+          Number of prompts to run in parallel, between 1 and 20.
+        </p>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
       <button
