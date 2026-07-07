@@ -86,4 +86,18 @@ describe("buildRatingPairs", () => {
     const orderB = buildRatingPairs(results, "seed-b").map((p) => `${p.a.id}:${p.b.id}`);
     expect(orderA).not.toEqual(orderB);
   });
+
+  it("is deterministic for the same seed regardless of the input array's order", () => {
+    const results = [
+      makeResult("r1", "pv-1", "a"),
+      makeResult("r2", "pv-1", "b"),
+      makeResult("r3", "pv-1", "c"),
+      makeResult("r4", "pv-1", "d"),
+    ];
+    const original = buildRatingPairs(results, "same-seed").map((p) => `${p.a.id}:${p.b.id}`);
+    const reversed = buildRatingPairs([...results].reverse(), "same-seed").map(
+      (p) => `${p.a.id}:${p.b.id}`
+    );
+    expect(reversed).toEqual(original);
+  });
 });

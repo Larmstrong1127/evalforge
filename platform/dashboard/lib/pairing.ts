@@ -63,6 +63,8 @@ export function buildRatingPairs(results: ResultResponse[], seed: string): Ratin
   // of the caller's array ordering.
   const sortedPromptVersionIds = [...byPromptVersion.keys()].sort();
   for (const promptVersionId of sortedPromptVersionIds) {
+    // Non-null: promptVersionId comes directly from byPromptVersion.keys()
+    // one line above, with no mutation of the map in between.
     const group = byPromptVersion.get(promptVersionId)!;
     if (group.length < 2) continue;
     const sortedGroup = [...group].sort((x, y) => x.id.localeCompare(y.id));
