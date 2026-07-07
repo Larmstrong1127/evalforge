@@ -49,3 +49,41 @@ async def test_list_suites_reports_prompt_count(api_client):
     assert response.status_code == 200
     suite = next(s for s in response.json() if s["name"] == "suite-with-prompts")
     assert suite["prompt_count"] == 2
+
+
+async def test_list_suite_runs_returns_runs_for_that_suite(api_client, session):
+    from evalforge.db.models import Run, RunStatus, Suite
+
+    suite_a = Suite(name="suite-a")
+    suite_b = Suite(name="suite-b")
+    run_a1 = Run(suite=suite_a, status=RunStatus.COMPLETED, concurrency_limit=1)
+    run_a2 = Run(suite=suite_a, status=RunStatus.QUEUED, concurrency_limit=1)
+    run_b1 = Run(suite=suite_b, status=RunStatus.COMPLETED, concurrency_limit=1)
+    session.add_all([suite_a, suite_b, run_a1, run_a2, run_b1])
+    await session.commit()
+
+    response = await api_client.get(f"/api/v1/suites/{suite_a.id}/runs")
+    assert response.status_code == 200
+    body = response.json()
+    returned_ids = {r["id"] for r in body}
+    assert returned_ids == {str(run_a1.id), str(run_a2.id)}
+    assert str(run_b1.id) not in returned_ids
+
+
+async def test_list_suite_runs_returns_empty_list_for_suite_with_no_runs(api_client, session):
+    from evalforge.db.models import Suite
+
+    suite = Suite(name="empty-suite")
+    session.add(suite)
+    await session.commit()
+
+    response = await api_client.get(f"/api/v1/suites/{suite.id}/runs")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+async def test_list_suite_runs_returns_404_for_missing_suite(api_client):
+    response = await api_client.get(
+        "/api/v1/suites/00000000-0000-0000-0000-000000000000/runs"
+    )
+    assert response.status_code == 404

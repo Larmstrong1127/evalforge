@@ -263,3 +263,27 @@ async def get_run_costs(run_id: str, session: AsyncSession = Depends(get_session
         total_tokens_out=total_out,
         by_candidate=by_candidate,
     )
+
+
+@router.get("/suites/{suite_id}/runs", response_model=list[RunStatusResponse])
+async def list_suite_runs(
+    suite_id: str, session: AsyncSession = Depends(get_session)  # noqa: B008
+) -> list[RunStatusResponse]:
+    suite_uuid = parse_uuid_or_404(suite_id, "suite")
+    suite = await session.get(Suite, suite_uuid)
+    if suite is None:
+        raise HTTPException(status_code=404, detail=f"suite {suite_id} not found")
+    runs = (
+        await session.execute(select(Run).where(Run.suite_id == suite_uuid))
+    ).scalars().all()
+    return [
+        RunStatusResponse(
+            id=r.id,
+            status=r.status.value,
+            completed_steps=r.completed_steps,
+            total_steps=r.total_steps,
+            started_at=r.started_at,
+            finished_at=r.finished_at,
+        )
+        for r in runs
+    ]
