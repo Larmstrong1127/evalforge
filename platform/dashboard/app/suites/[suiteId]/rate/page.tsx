@@ -22,6 +22,7 @@ export default function RatingRoomPage({
   const [revealed, setRevealed] = useState(false);
   const [voteCount, setVoteCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   const resultsQuery = useQuery({
     queryKey: ["run-results-for-rating", runId],
@@ -45,6 +46,7 @@ export default function RatingRoomPage({
   async function submitVote(chosenResultId: string | null, skipped: boolean) {
     if (submitting || !currentPair) return;
     setSubmitting(true);
+    setVoteError(null);
     try {
       await createRating({
         prompt_version_id: currentPair.a.prompt_version_id,
@@ -56,6 +58,8 @@ export default function RatingRoomPage({
       });
       setVoteCount((count) => count + 1);
       setRevealed(true);
+    } catch (err) {
+      setVoteError(err instanceof Error ? err.message : "Failed to submit vote, please try again");
     } finally {
       setSubmitting(false);
     }
@@ -122,13 +126,22 @@ export default function RatingRoomPage({
           result={currentPair.a}
           revealed={revealed}
           onChoose={() => submitVote(currentPair.a.id, false)}
+          label="Option A — press Left Arrow"
+          chooseLabel="Choose option A (left)"
         />
         <RatingCard
           result={currentPair.b}
           revealed={revealed}
           onChoose={() => submitVote(currentPair.b.id, false)}
+          label="Option B — press Right Arrow"
+          chooseLabel="Choose option B (right)"
         />
       </div>
+      {voteError && (
+        <p className="text-red-600 text-sm" role="alert">
+          {voteError}
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <button
           type="button"
