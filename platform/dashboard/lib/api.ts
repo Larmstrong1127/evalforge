@@ -1,5 +1,8 @@
 import type {
+  CompareResponse,
   CostResponse,
+  RatingCreate,
+  RatingResponse,
   ResultResponse,
   RunAccepted,
   RunCreate,
@@ -64,6 +67,24 @@ export function getRunResults(runId: string): Promise<ResultResponse[]> {
 
 export function getRunCosts(runId: string): Promise<CostResponse> {
   return request<CostResponse>(`/api/v1/runs/${runId}/costs`);
+}
+
+export function createRating(body: RatingCreate): Promise<RatingResponse> {
+  return request<RatingResponse>("/api/v1/ratings", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getCompare(runIdA: string, runIdB: string): Promise<CompareResponse> {
+  const params = new URLSearchParams();
+  params.append("run_id", runIdA);
+  params.append("run_id", runIdB);
+  return request<CompareResponse>(`/api/v1/compare?${params.toString()}`);
+}
+
+export function listSuiteRuns(suiteId: string): Promise<RunStatusResponse[]> {
+  return request<RunStatusResponse[]>(`/api/v1/suites/${suiteId}/runs`);
 }
 
 export { ApiError };
