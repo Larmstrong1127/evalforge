@@ -103,8 +103,11 @@ and wired into the platform as the `deberta-hallucination` judge
 
 - **Tests:** 72 backend (pytest, incl. a regression test reproducing a real
   FastAPI `BackgroundTasks`/session-commit ordering bug with two separate DB
-  engines), 29 training, 10 frontend (vitest). `ruff` + `mypy --strict` and
-  `eslint` + `tsc` clean.
+  engines), 29 training, 10 frontend (vitest). Backend and dashboard are
+  `ruff`/`mypy --strict` and `eslint`/`tsc` clean; the training package is
+  `ruff` clean but its ML-heavy scripts (`train.py`, `evaluate.py`,
+  `benchmark.py`) aren't run under `--strict` since third-party ML APIs
+  (torch, HF schedulers, TensorBoard) don't type cleanly at that level.
 - **CI:** lint/type/test on every PR, plus an **eval gate** — a fixed prompt
   suite runs against a pinned local model on every platform PR and fails the
   build on score collapse. The platform gates its own CI with itself.

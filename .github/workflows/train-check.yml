@@ -1,0 +1,31 @@
+name: Train package check
+
+on:
+  pull_request:
+    paths:
+      - "training/**"
+  push:
+    branches: [master]
+    paths:
+      - "training/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: training
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # CPU-only torch: CI checks the training package's code (data loading,
+      # metrics, config parsing), not GPU training performance.
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      # mypy --strict is not run here: train.py/evaluate.py/benchmark.py use
+      # third-party ML APIs (torch DataLoader, HF schedulers, TensorBoard)
+      # that don't type-check cleanly under --strict. The tested library
+      # code (data loading, metrics, config) is covered by pytest below.
+      - run: pytest -q
