@@ -28,9 +28,12 @@ export default function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="antialiased">
         <Providers>
-          <nav className="border-b border-gray-200 px-6 py-4">
+          <nav className="border-b border-gray-200 px-6 py-4 flex items-center gap-6">
             <Link href="/suites" className="font-semibold text-lg">
               EvalForge
+            </Link>
+            <Link href="/compare" className="text-sm text-gray-600 hover:text-gray-900">
+              Compare
             </Link>
           </nav>
           <main className="p-6">{children}</main>

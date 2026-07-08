@@ -62,3 +62,30 @@ export interface CostResponse {
   total_tokens_out: number;
   by_candidate: Record<string, number>;
 }
+
+export interface RatingCreate {
+  prompt_version_id: string;
+  result_a_id: string;
+  result_b_id: string;
+  chosen_result_id: string | null;
+  skipped: boolean;
+  rater_session: string | null;
+}
+
+export interface RatingResponse {
+  id: string;
+}
+
+export interface CompareRow {
+  prompt_version_id: string;
+  candidate_model: string;
+  run_a_result: ResultResponse | null;
+  run_b_result: ResultResponse | null;
+  score_delta: Record<string, number>;
+}
+
+export interface CompareResponse {
+  run_a: RunStatusResponse;
+  run_b: RunStatusResponse;
+  rows: CompareRow[];
+}
