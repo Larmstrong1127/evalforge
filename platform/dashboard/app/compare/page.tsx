@@ -45,7 +45,7 @@ export default function ComparePage() {
     <div className="space-y-8">
       <h1 className="text-xl font-semibold">Compare runs</h1>
       {optionsQuery.isError ? (
-        <p className="text-red-600 text-sm">
+        <p className="text-red-600 text-sm" role="alert">
           {optionsQuery.error instanceof Error ? optionsQuery.error.message : "Failed to load runs"}
         </p>
       ) : (
@@ -92,7 +92,7 @@ export default function ComparePage() {
         <p className="text-gray-500 text-sm">Comparing a run against itself — every delta should be 0.</p>
       )}
       {compareQuery.isError ? (
-        <p className="text-red-600 text-sm">
+        <p className="text-red-600 text-sm" role="alert">
           {compareQuery.error instanceof Error ? compareQuery.error.message : "Failed to load comparison"}
         </p>
       ) : compareQuery.data ? (
