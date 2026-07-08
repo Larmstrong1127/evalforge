@@ -2,7 +2,7 @@
 
 Date: 2026-07-04
 Status: Approved
-Parent spec: `docs/superpowers/specs/2026-07-02-evalforge-design.md` (section 2, "Next.js dashboard")
+Parent spec: `docs/design/specs/2026-07-02-evalforge-design.md` (section 2, "Next.js dashboard")
 Depends on: Phase 3a FastAPI backend (merged to master, `platform/api/`)
 
 ## 1. Scope
