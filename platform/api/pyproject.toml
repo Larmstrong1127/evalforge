@@ -61,6 +61,16 @@ strict = true
 [[tool.mypy.overrides]]
 # torch/transformers are an optional extra (see [project.optional-dependencies]
 # deberta) and won't be installed in every environment that runs mypy against
-# this package; don't fail strict-mode checking on missing stubs for them.
-module = "evalforge.judges.deberta_judge"
+# this package (CI installs only [dev]); don't fail strict-mode checking on
+# their missing stubs. Note: this must target torch/transformers themselves —
+# an override on deberta_judge only affects importing *it*, not what it imports.
+module = ["torch", "torch.*", "transformers", "transformers.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# deberta_judge carries a `type: ignore` that is needed when the deberta extra
+# IS installed (transformers' .to() stub over-narrows) but reads as unused when
+# it isn't (the import resolves to Any). Silence unused-ignore warnings for
+# this one module so strict mypy passes in both worlds.
+module = "evalforge.judges.deberta_judge"
+warn_unused_ignores = false
