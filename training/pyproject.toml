@@ -45,6 +45,10 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# One-off script with long markdown-table strings copied verbatim from the report.
+"publish_to_hub.py" = ["E501"]
+
 [tool.mypy]
 # 3.12, not 3.11 (see requires-python above): numpy's shipped .pyi stubs use
 # PEP 695 `type` statement syntax, which mypy can only parse when its

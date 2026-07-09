@@ -1,6 +1,5 @@
 # EvalForge Phase 3b-2: Rating Room + Compare View Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the A/B blind-voting rating room and the run-vs-run compare view, the
 two remaining pieces of the dashboard's originally-scoped feature set.

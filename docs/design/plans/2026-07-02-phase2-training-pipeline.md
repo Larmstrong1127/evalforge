@@ -1,6 +1,5 @@
 # EvalForge Phase 2: Training Pipeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build and test the `training/` package end to end — data loading, model
 wrapper, hand-written PyTorch training loop, evaluation metrics, and a

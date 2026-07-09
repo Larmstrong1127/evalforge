@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: evalforge
+      POSTGRES_PASSWORD: evalforge
+      POSTGRES_DB: evalforge
+    volumes:
+      - evalforge-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evalforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./platform/api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      EVALFORGE_DATABASE_URL: postgresql+asyncpg://evalforge:evalforge@db:5432/evalforge
+      EVALFORGE_SEED_DEMO: "1"
+      # Point at Ollama running on the host, if the user has it — optional,
+      # only used when a run is launched with an `ollama:` candidate.
+      EVALFORGE_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: ./platform/dashboard
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  evalforge-db-data:

@@ -2,7 +2,7 @@
 
 Date: 2026-07-06
 Status: Approved
-Parent spec: `docs/superpowers/specs/2026-07-02-evalforge-design.md` (sections 2, 5)
+Parent spec: `docs/design/specs/2026-07-02-evalforge-design.md` (sections 2, 5)
 Depends on: Phase 3a FastAPI backend (`POST /api/v1/ratings`, `GET /api/v1/compare`) and
 Phase 3b-1 dashboard core flow (both merged to master)
 

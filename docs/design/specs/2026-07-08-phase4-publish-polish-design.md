@@ -2,7 +2,7 @@
 
 Date: 2026-07-08
 Status: Approved
-Parent spec: `docs/superpowers/specs/2026-07-02-evalforge-design.md` (sections 7-9)
+Parent spec: `docs/design/specs/2026-07-02-evalforge-design.md` (sections 7-9)
 Depends on: Phases 1, 2, 3a, 3b-1, 3b-2 (all merged to master)
 
 ## 1. Scope
@@ -25,7 +25,7 @@ project already covers the Terraform/ECS story on the resume):
 5. **Two new ADRs** — the background-task commit-ordering decision and the
    judge plugin interface (both non-obvious calls that earned documentation).
 6. **Repo hygiene for publication** — remove tool-generated scaffold stubs,
-   replace boilerplate sub-READMEs, rename `docs/superpowers/` →
+   replace boilerplate sub-READMEs, rename `docs/design/` →
    `docs/design/` and strip tool-specific header boilerplate from the plans
    (the substantive design/plan content stays — it documents genuine process).
 7. **Publish to GitHub** — create the public repo and push. Gated on an

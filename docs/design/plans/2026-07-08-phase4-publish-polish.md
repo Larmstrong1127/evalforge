@@ -1,6 +1,5 @@
 # EvalForge Phase 4: Publish & Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Take the finished three-package project from "works on my machine"
 to a publishable portfolio repository: README, LICENSE, CI, Docker Compose
@@ -30,7 +29,7 @@ docker-compose.yml                        # NEW
 .github/workflows/eval-gate.yml           # NEW
 .github/scripts/eval_gate.py              # NEW
 .github/eval-baseline.json                # NEW
-docs/design/                              # RENAMED from docs/superpowers/
+docs/design/                              # RENAMED from docs/design/
 docs/adr/ADR-003-commit-before-background-task.md   # NEW
 docs/adr/ADR-004-judge-plugin-optional-extras.md    # NEW
 docs/images/                              # NEW: README screenshots
@@ -54,9 +53,8 @@ platform/dashboard/AGENTS.md              # DELETED
 - [ ] Add `platform/api/README.md` (~15 lines): what it is, venv install,
       `pytest`/`ruff`/`mypy`, `uvicorn evalforge.main:app`, pointer to root.
 - [ ] `git mv docs/superpowers docs/design`; update the handful of in-repo
-      references to `docs/superpowers/...` paths (grep and fix — they appear
+      references to `docs/design/...` paths (grep and fix — they appear
       in module docstrings in `runs.py` and in the docs themselves).
-- [ ] Strip the "> **For agentic workers:** REQUIRED SUB-SKILL..." blockquote
       line from each file in `docs/design/plans/` (content otherwise unchanged).
 - [ ] Add `LICENSE` — MIT, `Copyright (c) 2026 Landon Armstrong`.
 - [ ] Commit: `chore: repo hygiene for publication (LICENSE, sub-READMEs, docs rename)`

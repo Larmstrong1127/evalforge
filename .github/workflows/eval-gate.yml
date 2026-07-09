@@ -1,0 +1,27 @@
+name: Eval gate
+
+on:
+  pull_request:
+    paths:
+      - "platform/api/**"
+      - ".github/eval-gate-suite.json"
+      - ".github/eval-baseline.json"
+      - ".github/scripts/eval_gate.py"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start Ollama and pull pinned model
+        run: |
+          ollama serve &
+          for i in $(seq 1 30); do curl -sf http://localhost:11434 >/dev/null && break; sleep 1; done
+          ollama pull llama3.2
+      - run: pip install -e "platform/api[dev]"
+      - run: python .github/scripts/eval_gate.py

@@ -1,0 +1,14 @@
+{
+  "name": "ci-eval-gate",
+  "description": "Fixed regression suite run against a pinned local Ollama model on every platform PR.",
+  "prompts": [
+    { "input_text": "What is 2+2? Answer with the number only.", "expected_output": "4" },
+    { "input_text": "What is the capital of France? One word.", "expected_output": "Paris" },
+    { "input_text": "What color is a stop sign? One word.", "expected_output": "Red" },
+    { "input_text": "What is the opposite of hot? One word.", "expected_output": "Cold" },
+    { "input_text": "How many days are in a week? Answer with the number only.", "expected_output": "7" },
+    { "input_text": "What is the capital of Japan? One word.", "expected_output": "Tokyo" },
+    { "input_text": "What is 10 minus 3? Answer with the number only.", "expected_output": "7" },
+    { "input_text": "What planet do we live on? One word.", "expected_output": "Earth" }
+  ]
+}

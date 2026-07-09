@@ -1,6 +1,5 @@
 # EvalForge Phase 3a: FastAPI Backend Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wrap the existing, already-tested runner/DB/CLI logic in a real
 FastAPI HTTP API, so a future Next.js dashboard has something to call.
@@ -760,7 +759,7 @@ class CostResponse(BaseModel):
 ```python
 """POST /runs must never hand its request-scoped session to the background
 task — see the module-level note on `_run_in_background` below and
-docs/superpowers/specs/2026-07-03-phase3a-fastapi-backend-design.md section
+docs/design/specs/2026-07-03-phase3a-fastapi-backend-design.md section
 4 for why: the request's AsyncSession is torn down as part of the request/
 response lifecycle, and BackgroundTasks execute after the response is sent.
 Sharing it produces a closed-session/detached-instance error the first time

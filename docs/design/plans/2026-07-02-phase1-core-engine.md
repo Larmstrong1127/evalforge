@@ -1,6 +1,5 @@
 # EvalForge Phase 1: Core Engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A working eval engine: define a suite of prompts, run it against any of four providers (Claude/OpenAI/Gemini/Ollama) with bounded concurrency and retries, score outputs with pluggable judges, persist everything to a database, and drive it all from a CLI.
 

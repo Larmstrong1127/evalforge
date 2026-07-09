@@ -2,7 +2,7 @@
 
 Date: 2026-07-03
 Status: Approved
-Parent spec: `docs/superpowers/specs/2026-07-02-evalforge-design.md` (sections 5, 11)
+Parent spec: `docs/design/specs/2026-07-02-evalforge-design.md` (sections 5, 11)
 
 ## 1. Scope
 
