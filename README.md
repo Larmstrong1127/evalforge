@@ -51,6 +51,24 @@ To launch **real** evaluation runs from the demo:
   `EVALFORGE_OPENAI_API_KEY` / `EVALFORGE_GEMINI_API_KEY` on the `api`
   service and use candidates like `anthropic:claude-sonnet-5`.
 
+> The screenshots above and the seed data behind them are from running the
+> API and dashboard directly (no Docker) against the same code that ships in
+> `docker-compose.yml` — the dev machine this was built on doesn't have
+> Docker installed. The compose file and both Dockerfiles are logically
+> straightforward (standard multi-stage Next.js standalone build, plain
+> `pip install` for the API) but an actual `docker compose up --build` run
+> hasn't been verified end-to-end. Flagging this rather than claiming
+> verification I don't have.
+
+### No Docker
+
+```bash
+# terminal 1
+cd platform/api && pip install -e ".[dev]" && EVALFORGE_SEED_DEMO=1 uvicorn evalforge.main:app
+# terminal 2
+cd platform/dashboard && npm install && npm run dev
+```
+
 ## The fine-tuned judge, honestly
 
 The `training/` package fine-tunes `deberta-v3-base` for binary
