@@ -8,21 +8,22 @@ human preference votes, and diff any two runs to catch regressions.
 [![CI](https://github.com/Larmstrong1127/evalforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Larmstrong1127/evalforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-```
-Dashboard (Next.js + TypeScript)
-  suites · runs & results · costs · blind A/B rating room · run-vs-run compare
-        | REST (OpenAPI)
-API (FastAPI + Pydantic)
-  suites · prompt versioning · runs · results · ratings · compare
-Eval Runner (asyncio)
-  bounded concurrency · per-item failure isolation · cost & latency tracking
-Providers (plugin)             Judges (plugin)
-  claude / openai /              exact_match / llm_judge /
-  gemini / ollama                deberta-hallucination (ours, fine-tuned)
-        |
-PostgreSQL (SQLite fallback for zero-setup dev)
+```mermaid
+flowchart TB
+    D["Dashboard — Next.js + TypeScript<br/>suites · runs & results · costs · blind A/B rating room · run-vs-run compare"]
+    A["API — FastAPI + Pydantic<br/>suites · prompt versioning · runs · results · ratings · compare"]
+    R["Eval Runner — asyncio<br/>bounded concurrency · per-item failure isolation · cost & latency tracking"]
+    P["Providers (plugin)<br/>claude · openai · gemini · ollama"]
+    J["Judges (plugin)<br/>exact_match · llm_judge · deberta-hallucination (ours)"]
+    DB[("PostgreSQL<br/>SQLite fallback for zero-setup dev")]
+    T["training/ — PyTorch package<br/>fine-tuned the DeBERTa judge"]
 
-training/  — separate PyTorch package that produced the DeBERTa judge
+    D -->|REST / OpenAPI| A
+    A --> R
+    R --> P
+    R --> J
+    A --> DB
+    T -.->|publishes checkpoint| J
 ```
 
 ## Screenshots
@@ -128,7 +129,12 @@ and wired into the platform as the `deberta-hallucination` judge
   (torch, HF schedulers, TensorBoard) don't type cleanly at that level.
 - **CI:** lint/type/test on every PR, plus an **eval gate** — a fixed prompt
   suite runs against a pinned local model on every platform PR and fails the
-  build on score collapse. The platform gates its own CI with itself.
+  build on score collapse. The platform gates its own CI with itself. The
+  recorded baseline (0.375, measured against a real local `llama3.2`) is
+  deliberately low: `exact_match` is a strict judge and a 3B model rambles —
+  the gate exists to catch *regressions in the platform's plumbing*, not to
+  showcase model quality. A pipeline bug that drops scores to 0 fails the
+  build; the absolute number is beside the point.
 - **History:** conventional commits throughout; every phase shipped through
   a written design spec, an implementation plan, and code review — the specs
   and plans are in the repo.
