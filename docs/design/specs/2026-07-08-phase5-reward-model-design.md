@@ -37,7 +37,10 @@ scores future runs inside the same platform.
 4. **Sequence budget: 1024 tokens** (not 512). Right-truncating completions
    under a small budget can leave chosen/rejected pairs textually identical —
    training on zero-variance pairs is pure noise. Mitigations:
-   - prompt is preserved; only the completion tail is truncated;
+   - truncation uses the tokenizer's default `longest_first` strategy (the
+     longer of prompt/completion is trimmed token-by-token) — this trims
+     oversized prompts before eating completions, and training and judge
+     inference use the identical strategy;
    - the data loader AUDITS the processed set and reports the fraction of
      pairs whose (prompt, chosen) and (prompt, rejected) encodings are
      identical after truncation; identical pairs are dropped;

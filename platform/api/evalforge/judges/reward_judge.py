@@ -50,7 +50,6 @@ class RewardJudge:
         self._temperature = float(getattr(self._model.config, "reward_temperature", 1.0))
 
     def _score_sync(self, prompt: str, output: str) -> tuple[float, float]:
-        self._ensure_loaded()
         assert self._tokenizer is not None and self._model is not None
         encoding = self._tokenizer(
             prompt, output, truncation=True, max_length=MAX_LENGTH, return_tensors="pt"
@@ -63,6 +62,12 @@ class RewardJudge:
     async def score(self, prompt: str, expected: str | None, output: str) -> Judgment | None:
         if not output.strip():
             return None  # nothing to score; don't load the model for this
+        # Load on the event loop BEFORE handing off to a worker thread: the
+        # runner judges items concurrently, and lazy-loading inside to_thread
+        # would let several threads race the first load (redundant multi-GB
+        # downloads + duplicate models on the GPU). Same pattern as
+        # deberta_judge.py.
+        self._ensure_loaded()
         calibrated, raw = await asyncio.to_thread(self._score_sync, prompt, output)
         return Judgment(
             score=calibrated,
