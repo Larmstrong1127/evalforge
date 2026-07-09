@@ -27,6 +27,10 @@ postgres = ["asyncpg>=0.29"]
 # Kept out of the base dependency set so the core async platform stays
 # lightweight for users who only need the cloud judges / providers.
 deberta = ["torch>=2.3", "transformers>=4.42"]
+# Optional: the local preference reward judge (evalforge.judges.reward_judge).
+# Same torch/transformers set as `deberta`, kept as a separate extra so
+# consumers only pull in the judge(s) they actually use.
+reward = ["torch>=2.3", "transformers>=4.42"]
 
 [project.scripts]
 evalforge = "evalforge.cli:app"
@@ -72,5 +76,5 @@ ignore_missing_imports = true
 # IS installed (transformers' .to() stub over-narrows) but reads as unused when
 # it isn't (the import resolves to Any). Silence unused-ignore warnings for
 # this one module so strict mypy passes in both worlds.
-module = "evalforge.judges.deberta_judge"
+module = ["evalforge.judges.deberta_judge", "evalforge.judges.reward_judge"]
 warn_unused_ignores = false

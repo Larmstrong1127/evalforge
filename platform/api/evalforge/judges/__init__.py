@@ -38,4 +38,10 @@ def get_judge(name: str, settings: Settings) -> Judge:
         from evalforge.judges.deberta_judge import DebertaJudge
 
         return DebertaJudge(settings)
+    if name == "reward":
+        # Same lazy-import rationale as deberta-hallucination above: needs
+        # the optional `reward` extra (torch/transformers) installed.
+        from evalforge.judges.reward_judge import RewardJudge
+
+        return RewardJudge(settings)
     return registry[name](settings)  # type: ignore[no-any-return]
