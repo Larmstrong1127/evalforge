@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 
 from eval_reward import load_jsonl_pairs
-
 from training.data.preference import PreferencePair
 
 
