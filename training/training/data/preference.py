@@ -52,7 +52,11 @@ def load_ultrafeedback_pairs(
         rejected = row["rejected"][-1]["content"]
         if chosen == rejected:
             continue  # no preference signal at all
-        pairs.append(PreferencePair(prompt=row["prompt"], chosen=chosen, rejected=rejected))
+        prompt_messages = row["chosen"][:-1]
+        prompt = (
+            flatten_messages(prompt_messages) if len(prompt_messages) > 1 else row["prompt"]
+        )
+        pairs.append(PreferencePair(prompt=prompt, chosen=chosen, rejected=rejected))
     return pairs
 
 

@@ -36,6 +36,29 @@ def test_load_pairs_skips_identical_completions() -> None:
     assert pairs[0].prompt == "q2"
 
 
+def test_load_pairs_flattens_multi_turn_prompts() -> None:
+    rows = [
+        {
+            "prompt": "and 2+2?",
+            "chosen": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello"},
+                {"role": "user", "content": "and 2+2?"},
+                {"role": "assistant", "content": "4"},
+            ],
+            "rejected": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello"},
+                {"role": "user", "content": "and 2+2?"},
+                {"role": "assistant", "content": "5"},
+            ],
+        }
+    ]
+    pairs = load_ultrafeedback_pairs(load_fn=lambda split: rows)
+    assert pairs[0].prompt == "user: hi\nassistant: hello\nuser: and 2+2?"
+    assert pairs[0].chosen == "4"
+
+
 def test_flatten_messages_multi_turn() -> None:
     messages = [
         {"role": "user", "content": "hi"},
