@@ -1,0 +1,11 @@
+experiment_name: reward-lr2e5
+model_name: microsoft/deberta-v3-base
+max_length: 512
+batch_size: 8
+learning_rate: 2.0e-5
+warmup_ratio: 0.06
+max_grad_norm: 1.0
+max_epochs: 3
+early_stopping_patience: 1
+use_amp: true
+seed: 42

@@ -139,10 +139,35 @@ and wired into the platform as the `deberta-hallucination` judge
   a written design spec, an implementation plan, and code review — the specs
   and plans are in the repo.
 
+## The preference reward model, honestly
+
+Phase 5 closed the platform's preference loop: a DeBERTa-v3 Bradley-Terry
+reward model, trained with a hand-written dual-forward PyTorch loop on
+UltraFeedback-binarized (60,700 pairs, 512 tokens, audited truncation),
+temperature-calibrated (T=1.167), and wired in as the `reward` judge — the
+first judge that scores any (prompt, output) pair with no golden answer.
+
+| Split | N | Pairwise accuracy |
+|---|---|---|
+| UltraFeedback test_prefs (ID) | 1,987 | **0.7026** |
+| Human OOD probe (this rating room, blind A/B on real llama3.2 vs qwen2.5:14b outputs) | 15 | 0.4000 |
+
+The probe is tiny by construction and reported as a probe — but the
+direction matches the literature: AI-feedback preference data has a
+length/elaboration bias that doesn't transfer to an individual human. The
+model predicts *UltraFeedback-style* preferences, not yours; the rating
+room exists precisely to accumulate the human data that closes that gap.
+Also documented in the [model card](https://huggingface.co/DantheMan124/deberta-preference-reward):
+the lr-5e5 run collapsing to chance, and the 1024-token attempt dying at
+hour 8.5 with a CUDA fault before its first checkpoint (9–12 h/epoch was
+economically infeasible on one 3090; 512 tokens costs 1 dropped pair in
+62,688).
+
 ## Roadmap
 
 - SSE for live run progress (replacing the v1 polling).
-- Reward-model training on the rating room's collected preference pairs.
+- Re-train the reward model on accumulated rating-room votes once N is
+  meaningful (the closed loop's whole point).
 - Cloud deploy (Terraform/ECS) — deferred; the Compose demo covers local use.
 
 ## License
