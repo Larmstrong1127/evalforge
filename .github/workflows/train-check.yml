@@ -1,6 +1,7 @@
 name: Train package check
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "training/**"
