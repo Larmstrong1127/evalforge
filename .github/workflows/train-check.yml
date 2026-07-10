@@ -25,8 +25,11 @@ jobs:
       # metrics, config parsing), not GPU training performance.
       - run: pip install -e ".[dev]"
       # benchmark.py drives cloud judges through the PLATFORM's provider
-      # adapters (deliberate reuse), so its tests import evalforge.
-      - run: pip install -e ../platform/api
+      # adapters (deliberate reuse), so its tests import evalforge. Install
+      # NON-editable: an editable install puts platform/api itself on
+      # sys.path, and its `tests/` package then shadows this package's
+      # `tests/` during pytest collection.
+      - run: pip install ../platform/api
       - run: ruff check .
       # mypy --strict is not run here: train.py/evaluate.py/benchmark.py use
       # third-party ML APIs (torch DataLoader, HF schedulers, TensorBoard)
