@@ -23,6 +23,9 @@ jobs:
       # CPU-only torch: CI checks the training package's code (data loading,
       # metrics, config parsing), not GPU training performance.
       - run: pip install -e ".[dev]"
+      # benchmark.py drives cloud judges through the PLATFORM's provider
+      # adapters (deliberate reuse), so its tests import evalforge.
+      - run: pip install -e ../platform/api
       - run: ruff check .
       # mypy --strict is not run here: train.py/evaluate.py/benchmark.py use
       # third-party ML APIs (torch DataLoader, HF schedulers, TensorBoard)

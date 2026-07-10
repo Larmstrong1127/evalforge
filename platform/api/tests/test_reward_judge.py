@@ -1,9 +1,17 @@
-"""Tests for the reward judge (mocked model/tokenizer, no downloads)."""
-from unittest.mock import MagicMock, patch
+"""Tests for the reward judge (mocked model/tokenizer, no downloads).
 
-import torch
+torch/transformers are an optional extra (`pip install -e ".[reward]"`),
+not installed in the base dev environment — these tests skip gracefully
+(pytest.importorskip) rather than fail when the extra isn't present. Same
+pattern as test_deberta_judge.py.
+"""
+import pytest
 
-from evalforge.config import Settings
+torch = pytest.importorskip("torch")
+
+from unittest.mock import MagicMock, patch  # noqa: E402
+
+from evalforge.config import Settings  # noqa: E402
 
 
 def _make_judge():
