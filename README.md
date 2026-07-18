@@ -98,6 +98,11 @@ platform's own provider adapters:
 | gpt-4o | 82.5% | $2.03 | 1311 ms |
 | gemini-2.5-flash-lite | 78.5% | $0.08 | 1182 ms |
 
+_The benchmark table above is generated from
+[`training/benchmark_results.json`](training/benchmark_results.json) by
+[`training/scripts/gen_results_table.py`](training/scripts/gen_results_table.py) —
+the numbers are reproducibly derived, not hand-typed._
+
 Free and 43x faster, but not a drop-in replacement for a paid judge on
 out-of-distribution data — its realistic role today is a cheap first-pass
 filter. Full methodology, training curves, and a candid **"what didn't
@@ -106,7 +111,8 @@ dataset, a lost paid benchmark result, and more) live in
 [`training/README.md`](training/README.md). The shipped checkpoint is
 published on [Hugging Face Hub](https://huggingface.co/DantheMan124/deberta-hallucination-judge)
 and wired into the platform as the `deberta-hallucination` judge
-(optional extra: `pip install -e "platform/api[deberta]"`).
+(optional extra: `pip install -e "platform/api[deberta]"`); its full
+[model card](training/MODEL_CARD_hallucination_judge.md) is in the repo.
 
 ## Project layout
 
@@ -120,9 +126,9 @@ and wired into the platform as the `deberta-hallucination` judge
 
 ## Quality
 
-- **Tests:** 72 backend (pytest, incl. a regression test reproducing a real
+- **Tests:** 76 backend (pytest, incl. a regression test reproducing a real
   FastAPI `BackgroundTasks`/session-commit ordering bug with two separate DB
-  engines), 29 training, 10 frontend (vitest). Backend and dashboard are
+  engines), 50 training, 10 frontend (vitest). Backend and dashboard are
   `ruff`/`mypy --strict` and `eslint`/`tsc` clean; the training package is
   `ruff` clean but its ML-heavy scripts (`train.py`, `evaluate.py`,
   `benchmark.py`) aren't run under `--strict` since third-party ML APIs
@@ -157,7 +163,9 @@ direction matches the literature: AI-feedback preference data has a
 length/elaboration bias that doesn't transfer to an individual human. The
 model predicts *UltraFeedback-style* preferences, not yours; the rating
 room exists precisely to accumulate the human data that closes that gap.
-Also documented in the [model card](https://huggingface.co/DantheMan124/deberta-preference-reward):
+Also documented in the model card
+([Hub](https://huggingface.co/DantheMan124/deberta-preference-reward) ·
+[repo](training/MODEL_CARD_preference_reward.md)):
 the lr-5e5 run collapsing to chance, and the 1024-token attempt dying at
 hour 8.5 with a CUDA fault before its first checkpoint (9–12 h/epoch was
 economically infeasible on one 3090; 512 tokens costs 1 dropped pair in

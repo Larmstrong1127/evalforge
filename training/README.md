@@ -116,6 +116,12 @@ is the first real integration point between `training/` and `platform/`).
 | gpt-4o | 82.5% | $2.03 | 1311 ms | 1766 ms |
 | gemini-2.5-flash-lite | 78.5% | $0.08 | 1182 ms | 2558 ms |
 
+This table is generated from
+[`benchmark_results.json`](benchmark_results.json) by
+[`scripts/gen_results_table.py`](scripts/gen_results_table.py)
+(`python scripts/gen_results_table.py`), so the numbers stay in sync with the
+raw results rather than being hand-copied.
+
 Real API spend for this benchmark: **~$1.23 total** across all three cloud
 providers.
 
@@ -230,7 +236,7 @@ default relative path.
 
 None of these were caught by the test suite, and that's by design — every
 one of them required the real model, the real GPU, the real dataset schema,
-or a real network call to surface. The test suite's job (30 tests, all
+or a real network call to surface. The test suite's job (50 tests, all
 passing throughout every one of the above) was to guarantee the *logic*
 was correct once the real-world surprises were fixed; it was never going to
 catch the surprises themselves. The fast, cheap fix in hindsight for most of
@@ -242,12 +248,28 @@ attempts.
 
 ## What's next
 
-- Publish the `lr-2e5` checkpoint to Hugging Face Hub.
-- Wire it into `platform/api/evalforge/judges/` as a live `Judge`
-  implementation — likely as a cheap first-pass filter ahead of a paid
-  judge, per the benchmark's findings above, not a full replacement.
-- Train a reward model on preference pairs collected via the platform's
-  blind A/B rating room (Phase 2 in the parent design doc's roadmap).
+**Shipped since this study's first write-up:**
+
+- The `lr-2e5` checkpoint is
+  [published to Hugging Face Hub](https://huggingface.co/DantheMan124/deberta-hallucination-judge)
+  (`publish_to_hub.py`; model card:
+  [`MODEL_CARD_hallucination_judge.md`](MODEL_CARD_hallucination_judge.md)).
+- It is wired into the platform as the `deberta-hallucination` judge
+  (`platform/api/evalforge/judges/deberta_judge.py`) — a cheap first-pass
+  filter ahead of a paid judge, per the benchmark's findings above.
+- A preference **reward model** (DeBERTa-v3 Bradley-Terry, calibrated,
+  T=1.167) was trained on UltraFeedback-binarized and wired in as the
+  `reward` judge — see `train_reward.py`, `calibrate_reward.py`,
+  `eval_reward.py`, and its model card
+  [`MODEL_CARD_preference_reward.md`](MODEL_CARD_preference_reward.md).
+  ID pairwise accuracy 0.7026; the tiny human OOD probe sits at chance, so
+  the rating room's real job is to accumulate the human votes that close
+  that gap.
+
+Still open:
+
+- Re-train the reward model on accumulated rating-room votes once N is
+  meaningful — the closed loop's whole point.
 - Add resumable/checkpointed training (`train.py` currently has no
   optimizer-state resume — an interrupted run restarts from epoch 0; this
   bit twice during real runs on this project and is worth fixing before the
