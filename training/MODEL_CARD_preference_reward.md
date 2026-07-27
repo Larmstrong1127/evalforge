@@ -44,7 +44,9 @@ the `reward` judge — the platform's first judge that needs no golden answer.
 
 Raw Bradley-Terry logits are arbitrarily scaled, so a scalar temperature
 **T = 1.167** was fit post-hoc on the held-out split (NLL of
-`sigmoid(margin / T)`) and stored in `config.json` as `reward_temperature`.
+`sigmoid(margin / T)`) at the same 512-token budget used for training, and
+stored in `config.json` as `reward_temperature` (with the budget it was fit
+under alongside it as `reward_train_max_length`; see Correction below).
 Recommended normalized score: `sigmoid(logit / T)`. Pairwise accuracy is
 invariant to T; only score granularity depends on it.
 
@@ -62,6 +64,43 @@ roughly 0.16–0.68), and it is reported as a probe, not a benchmark — but
 the direction is consistent with the documented length/elaboration bias of
 AI-feedback preference data: **this model predicts UltraFeedback-style
 preferences, not any individual human's.**
+
+## Correction (2026-07-26): train/serve sequence-length mismatch
+
+An audit flagged that this model trains and is configured at **512** tokens
+while three shipped code paths defaulted to **1024**:
+`training/eval_reward.py`, `training/calibrate_reward.py`, and the platform's
+`reward_judge.py`. The suspicion was that the headline metrics had been
+measured off-regime.
+
+**Both numbers were re-measured on the same held-out split, and they hold.**
+The published figures were produced at 512 all along — the operator had
+passed `--max-length 512` explicitly; only the *defaults* were stale. The
+re-run reproduces the stored temperature bit-for-bit
+(`1.166796088218689`), which is conclusive.
+
+| Metric | Published | Re-measured @512 | Off-regime @1024 |
+|---|---|---|---|
+| ID pairwise accuracy (`test_prefs`, N=1,987) | 0.7026 | **0.7026** | 0.7046 |
+| Calibration temperature T | 1.167 | **1.1668** | 1.1395 |
+| Pairs dropped by truncation audit | 1 / 62,688 | **1 / 62,688** | 1 / 62,688 |
+| OOD probe (N=15) | 0.400 | **0.400** | — |
+
+So the *documentation* was correct and the *code* was wrong. The real defect
+was in serving, not in reporting: the platform judge scored live traffic at
+1024 while applying a temperature fit at 512. That is not hypothetical —
+**39% of `test_prefs` pairs (776 / 1,988) have at least one side exceeding
+512 tokens**, so the judge routinely fed the model context it never saw in
+training. DeBERTa-v3 uses relative position embeddings, so it degrades
+gracefully instead of erroring, which is exactly why the mismatch survived
+review. The measured cost of the off-regime setting is small (+0.20pt
+accuracy, T off by 0.027) but it was unmeasured, and an unmeasured
+difference is not a small one.
+
+**Fix:** the sequence budget is no longer restated anywhere. It is derived
+from the checkpoint's own `config.json` — now carrying an explicit
+`reward_train_max_length: 512` next to `reward_temperature`, so the constant
+and the regime it was fit under travel together with the weights.
 
 ## Limitations
 

@@ -19,6 +19,7 @@ from training.data.preference import (
     audit_and_filter_pairs,
     load_ultrafeedback_pairs,
 )
+from training.reward_metadata import load_checkpoint_max_length
 from training.train_reward import PairDataset, evaluate_pairs, pair_collate
 
 
@@ -38,9 +39,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--probe", type=Path, default=None)
-    parser.add_argument("--max-length", type=int, default=1024)
+    # Default derived from the checkpoint, never hardcoded: evaluating at a
+    # different budget than training measures a regime the model never saw.
+    parser.add_argument("--max-length", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=8)
     args = parser.parse_args()
+
+    max_length = args.max_length or load_checkpoint_max_length(args.checkpoint)
+    print(f"sequence budget: {max_length} tokens (from checkpoint config)")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
@@ -50,14 +56,14 @@ def main() -> None:
 
     def acc_for(pairs: list[PreferencePair]) -> float:
         loader = DataLoader(
-            PairDataset(pairs, tokenizer, args.max_length),
+            PairDataset(pairs, tokenizer, max_length),
             batch_size=args.batch_size,
             collate_fn=lambda items: pair_collate(items, tokenizer.pad_token_id),
         )
         return evaluate_pairs(model, loader, device)
 
     id_pairs = load_ultrafeedback_pairs(split="test_prefs")
-    id_pairs, _ = audit_and_filter_pairs(id_pairs, tokenizer, args.max_length)
+    id_pairs, _ = audit_and_filter_pairs(id_pairs, tokenizer, max_length)
     print(
         f"ID (UltraFeedback test_prefs, N={len(id_pairs)}): "
         f"pairwise accuracy = {acc_for(id_pairs):.4f}"

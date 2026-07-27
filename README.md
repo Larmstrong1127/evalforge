@@ -171,6 +171,17 @@ hour 8.5 with a CUDA fault before its first checkpoint (9–12 h/epoch was
 economically infeasible on one 3090; 512 tokens costs 1 dropped pair in
 62,688).
 
+A later self-audit caught the tail of that abandoned 1024 attempt: the
+eval/calibration scripts and the `reward` judge still *defaulted* to 1024
+against a 512-token checkpoint. Re-measuring on the same held-out split
+confirmed the published numbers above were unaffected — they were produced
+at 512, and the re-run reproduces the stored temperature bit-for-bit — but
+the judge had genuinely been *serving* at 1024, and 39% of held-out pairs
+exceed 512 tokens on one side, so it was scoring off-regime in production.
+The sequence budget is now derived from the checkpoint's own config rather
+than restated in three files. Written up in full in the
+[model card](training/MODEL_CARD_preference_reward.md#correction-2026-07-26-trainserve-sequence-length-mismatch).
+
 ## Roadmap
 
 - SSE for live run progress (replacing the v1 polling).

@@ -35,6 +35,7 @@ async def test_score_returns_calibrated_sigmoid_with_raw_in_justification() -> N
         mock_tok.from_pretrained.return_value = tokenizer
         model = MagicMock()
         model.config.reward_temperature = 2.0
+        model.config.reward_train_max_length = 512
         output = MagicMock()
         output.logits = torch.tensor([[4.0]])
         model.return_value = output
@@ -49,6 +50,36 @@ async def test_score_returns_calibrated_sigmoid_with_raw_in_justification() -> N
     assert judgment.justification is not None
     assert "raw_reward=4.000" in judgment.justification
     assert "temperature=2.00" in judgment.justification
+    # The sequence budget must come from the checkpoint, not a literal: the
+    # judge shipped with a 1024 constant against a 512-token checkpoint.
+    assert tokenizer.call_args.kwargs["max_length"] == 512
+
+
+def test_resolve_max_length_prefers_explicit_training_key() -> None:
+    from evalforge.judges.reward_judge import _resolve_max_length
+
+    config = MagicMock()
+    config.reward_train_max_length = 512
+    config.max_position_embeddings = 1024
+    assert _resolve_max_length(config) == 512
+
+
+def test_resolve_max_length_falls_back_to_position_limit() -> None:
+    """Checkpoints exported before the explicit key still resolve correctly."""
+
+    class _Config:
+        max_position_embeddings = 512
+
+    from evalforge.judges.reward_judge import _resolve_max_length
+
+    assert _resolve_max_length(_Config()) == 512
+
+
+def test_resolve_max_length_raises_when_undeterminable() -> None:
+    from evalforge.judges.reward_judge import _resolve_max_length
+
+    with pytest.raises(ValueError, match="training sequence budget"):
+        _resolve_max_length(object())
 
 
 async def test_score_empty_output_returns_none_without_loading() -> None:
