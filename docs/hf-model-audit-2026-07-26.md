@@ -3,6 +3,36 @@
 **Date:** 2026-07-26
 **Auditor persona:** principal MLE / hiring manager, 10-minute skim
 **Model:** https://huggingface.co/DantheMan124/deberta-preference-reward
+> ## Resolution (2026-07-26)
+>
+> All three MUST-FIX items are closed. The body below is preserved unedited as
+> the record of what was found; this note says only what has since landed.
+>
+> | Item | Status | Landed in |
+> |---|---|---|
+> | **A1** — usage snippet demonstrates an uncalibrated absolute score | **CLOSED** | `fix: make reward score semantics relative and add a public baseline` |
+> | **A2** — 512-vs-1024 sequence-budget mismatch | **CLOSED** (and finding 2's premise corrected — see the inline correction) | `2db9fff` |
+> | **A3** — no baseline next to the headline number | **CLOSED** | `fix: make reward score semantics relative and add a public baseline` |
+>
+> A1 went further than the draft snippet below: the same statistical error was
+> live in production, so `platform/api/evalforge/judges/reward_judge.py` now
+> returns the **temperature-scaled Bradley-Terry logit** (`raw / T`) instead of
+> `sigmoid(raw / T)`. The score is documented as relative-only — unbounded,
+> arbitrary additive offset, valid for ranking within one prompt — and
+> `/compare`'s `score_delta` is consequently the calibrated margin, so
+> `sigmoid(score_delta)` is a real preference probability. `Judgment`'s
+> protocol docstring now states the 0-1 convention and the documented
+> exception rather than being quietly violated.
+>
+> A3 landed as `training/eval_reward_baseline.py`, which reuses the same
+> `evaluate_pairs` harness: chance floor **0.5000**,
+> `OpenAssistant/reward-model-deberta-v3-large-v2` (435M) **0.6009**, this
+> model **0.7026**, all on `test_prefs` N=1,987 at 512 tokens. The public model
+> loses because UltraFeedback is out-of-distribution for it, and the cards say
+> so explicitly rather than banking the win.
+>
+> SHOULD-FIX (B1–B5) and NICE-TO-HAVE (C1–C7) remain open.
+
 **Status:** **PUBLIC and live.** Loads, renders, MIT-licensed, tagged. The blurb's link works — no automatic disqualifier.
 
 ## Repo contents (verified)

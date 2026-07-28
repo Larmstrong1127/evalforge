@@ -262,9 +262,12 @@ attempts.
   `reward` judge — see `train_reward.py`, `calibrate_reward.py`,
   `eval_reward.py`, and its model card
   [`MODEL_CARD_preference_reward.md`](MODEL_CARD_preference_reward.md).
-  ID pairwise accuracy 0.7026; the tiny human OOD probe sits at chance, so
-  the rating room's real job is to accumulate the human votes that close
-  that gap.
+  ID pairwise accuracy 0.7026 against a 0.5000 chance floor and 0.6009 for
+  `OpenAssistant/reward-model-deberta-v3-large-v2` (435M) run on the same
+  split through the same harness (`eval_reward_baseline.py`) — the public
+  model is out-of-distribution on UltraFeedback, so that gap measures fit,
+  not quality. The tiny human OOD probe sits at chance, so the rating room's
+  real job is to accumulate the human votes that close that gap.
 
 Still open:
 

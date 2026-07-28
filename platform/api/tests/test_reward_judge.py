@@ -20,7 +20,14 @@ def _make_judge():
     return RewardJudge(Settings(database_url="sqlite+aiosqlite:///:memory:"))
 
 
-async def test_score_returns_calibrated_sigmoid_with_raw_in_justification() -> None:
+async def test_score_returns_temperature_scaled_reward_with_raw_in_justification() -> None:
+    """The score is `raw / T`, NOT `sigmoid(raw / T)`.
+
+    Bradley-Terry rewards have an arbitrary additive offset and T was fit on
+    pairwise margins, so squashing a bare logit produced a number that looked
+    like a calibrated probability and wasn't. Keeping the scaled logit means
+    a difference of two scores is the calibrated margin.
+    """
     judge = _make_judge()
     with patch("evalforge.judges.reward_judge.AutoTokenizer") as mock_tok, patch(
         "evalforge.judges.reward_judge.AutoModelForSequenceClassification"
@@ -45,14 +52,47 @@ async def test_score_returns_calibrated_sigmoid_with_raw_in_justification() -> N
         judgment = await judge.score("What is 2+2?", None, "4")
 
     assert judgment is not None
-    expected = torch.sigmoid(torch.tensor(4.0 / 2.0)).item()
-    assert abs(judgment.score - expected) < 1e-6
+    assert abs(judgment.score - 2.0) < 1e-6  # 4.0 / T=2.0, unsquashed
     assert judgment.justification is not None
     assert "raw_reward=4.000" in judgment.justification
     assert "temperature=2.00" in judgment.justification
+    # The justification is the only place a dashboard reader learns the score
+    # is relative; losing this wording silently restores the old misreading.
+    assert "not an absolute quality probability" in judgment.justification
     # The sequence budget must come from the checkpoint, not a literal: the
     # judge shipped with a 1024 constant against a 512-token checkpoint.
     assert tokenizer.call_args.kwargs["max_length"] == 512
+
+
+async def test_score_is_unbounded_not_a_probability() -> None:
+    """A negative reward must stay negative.
+
+    Guards the semantics change: any future re-squashing through a sigmoid
+    would silently clamp this into (0, 1) and the score would start reading as
+    a probability again.
+    """
+    judge = _make_judge()
+    with patch("evalforge.judges.reward_judge.AutoTokenizer") as mock_tok, patch(
+        "evalforge.judges.reward_judge.AutoModelForSequenceClassification"
+    ) as mock_model_cls:
+        tokenizer = MagicMock()
+        encoding = MagicMock()
+        encoding.to.return_value = {"input_ids": torch.tensor([[1, 2, 3]])}
+        tokenizer.return_value = encoding
+        mock_tok.from_pretrained.return_value = tokenizer
+        model = MagicMock()
+        model.config.reward_temperature = 1.0
+        model.config.reward_train_max_length = 512
+        output = MagicMock()
+        output.logits = torch.tensor([[-2.5]])
+        model.return_value = output
+        model.to.return_value = model
+        mock_model_cls.from_pretrained.return_value = model
+
+        judgment = await judge.score("prompt", None, "a plausible but weak answer")
+
+    assert judgment is not None
+    assert abs(judgment.score - -2.5) < 1e-6
 
 
 def test_resolve_max_length_prefers_explicit_training_key() -> None:

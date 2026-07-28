@@ -153,10 +153,30 @@ UltraFeedback-binarized (60,700 pairs, 512 tokens, audited truncation),
 temperature-calibrated (T=1.167), and wired in as the `reward` judge — the
 first judge that scores any (prompt, output) pair with no golden answer.
 
-| Split | N | Pairwise accuracy |
-|---|---|---|
-| UltraFeedback test_prefs (ID) | 1,987 | **0.7026** |
-| Human OOD probe (this rating room, blind A/B on real llama3.2 vs qwen2.5:14b outputs) | 15 | 0.4000 |
+Every row below is the same split through the same harness
+(`training/eval_reward.py`, `training/eval_reward_baseline.py`):
+
+| Model / split | Params | N | Pairwise accuracy |
+|---|---|---|---|
+| Chance floor (balanced binary choice) | — | — | 0.5000 |
+| `OpenAssistant/reward-model-deberta-v3-large-v2` (public baseline, OOD for it) | 435M | 1,987 | 0.6009 |
+| **This model** — UltraFeedback test_prefs (ID) | 184M | 1,987 | **0.7026** |
+| Human OOD probe (this rating room, blind A/B on real llama3.2 vs qwen2.5:14b outputs) | 184M | 15 | 0.4000 |
+
+The baseline row is what makes 0.7026 readable rather than unanchored — but
+it is not a claim of superiority. This model is *in*-distribution on
+UltraFeedback and the public model, trained on a different preference mixture
+(WebGPT / summarize-from-feedback / Anthropic HH), is *out* of it. The honest
+symmetric result is the last row: on human votes, this model drops to chance
+too. What the comparison does establish is the tradeoff the project set out to
+test — a 184M local judge that costs nothing per call, measured against a
+2.4x-larger public model in the same harness instead of asserted.
+
+Note also that the reward score is *relative*: Bradley-Terry identifies rewards
+only up to an additive constant, so only comparisons between two responses to
+the same prompt are meaningful. The `reward` judge's score is the
+temperature-scaled logit for exactly that reason, and `sigmoid` of a score
+*difference* is the calibrated preference probability.
 
 The probe is tiny by construction and reported as a probe — but the
 direction matches the literature: AI-feedback preference data has a

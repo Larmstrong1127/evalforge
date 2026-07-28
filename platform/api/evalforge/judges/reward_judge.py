@@ -10,11 +10,37 @@ Unlike every other judge, this one needs NO expected output — it scores any
 (prompt, output) pair, so it works on suites without golden answers.
 `expected` is accepted and ignored (protocol uniformity).
 
-Score = sigmoid(raw_reward / T) where T is the calibration temperature fit
-post-hoc on the ID validation split and stored in the checkpoint config as
-`reward_temperature` (fallback 1.0 for uncalibrated checkpoints). The raw
-reward is preserved in the justification string — Bradley-Terry logits are
-the fine-grained signal; the sigmoid is a UI-friendly squash.
+SCORE SEMANTICS — read before comparing these numbers to any other judge's.
+
+`Judgment.score` here is the **temperature-scaled Bradley-Terry reward**,
+`raw_reward / T`. It is a *relative* preference score, not a 0-1 quality
+probability:
+
+- It is unbounded (both signs occur) and has an **arbitrary additive
+  offset**. Bradley-Terry training only ever sees `r_chosen - r_rejected`, so
+  the objective is invariant to adding a constant to every reward. Nothing
+  pins the zero point.
+- It is therefore valid **only for ranking candidate outputs against each
+  other on the same prompt**. A single value in isolation says nothing about
+  absolute quality, and averaging it across a suite is meaningless.
+- Differences *are* meaningful and *are* calibrated: for two outputs A and B
+  on one prompt, `sigmoid(score_B - score_A)` is the model's calibrated
+  P(B preferred over A). That is exactly the quantity T was fit for — T
+  minimizes NLL of `sigmoid(margin / T)` on the held-out split, i.e. it was
+  calibrated on *margins*. Dividing by T here means `/compare`'s
+  `score_delta` is already the calibrated margin, so a consumer can pass it
+  straight to a sigmoid.
+
+This judge previously returned `sigmoid(raw_reward / T)` and presented it as
+a calibrated 0-1 quality score. That was a statistical error on two counts:
+it applied a margin-fit temperature to a bare logit, and it dressed an
+offset-free relative score up as an absolute probability. The sigmoid was
+also pure loss — being monotone it changed no ranking, while squashing away
+the margin information that is the model's only validated output.
+
+T comes from the checkpoint config key `reward_temperature` (fallback 1.0 for
+uncalibrated checkpoints); the raw pre-scaling reward is preserved in the
+justification string.
 
 The tokenizer's sequence budget is likewise derived from the checkpoint
 config rather than hardcoded (see `_resolve_max_length`): train and serve
@@ -81,6 +107,11 @@ class RewardJudge:
         self._max_length = _resolve_max_length(self._model.config)
 
     def _score_sync(self, prompt: str, output: str) -> tuple[float, float]:
+        """Return (temperature-scaled reward, raw reward).
+
+        The scaled value is the score; see the module docstring for why it is
+        deliberately NOT squashed through a sigmoid.
+        """
         assert self._tokenizer is not None and self._model is not None
         assert self._max_length is not None
         encoding = self._tokenizer(
@@ -88,8 +119,7 @@ class RewardJudge:
         ).to(self._device)
         with torch.no_grad():
             raw = self._model(**encoding).logits.squeeze().item()
-        calibrated = torch.sigmoid(torch.tensor(raw / self._temperature)).item()
-        return calibrated, raw
+        return raw / self._temperature, raw
 
     async def score(self, prompt: str, expected: str | None, output: str) -> Judgment | None:
         if not output.strip():
@@ -100,8 +130,12 @@ class RewardJudge:
         # downloads + duplicate models on the GPU). Same pattern as
         # deberta_judge.py.
         self._ensure_loaded()
-        calibrated, raw = await asyncio.to_thread(self._score_sync, prompt, output)
+        scaled, raw = await asyncio.to_thread(self._score_sync, prompt, output)
         return Judgment(
-            score=calibrated,
-            justification=f"raw_reward={raw:.3f}, temperature={self._temperature:.2f}",
+            score=scaled,
+            justification=(
+                f"relative preference score (Bradley-Terry, ranking within the same "
+                f"prompt only — not an absolute quality probability); "
+                f"raw_reward={raw:.3f}, temperature={self._temperature:.2f}"
+            ),
         )

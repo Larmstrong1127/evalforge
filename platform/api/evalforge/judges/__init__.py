@@ -12,7 +12,22 @@ from evalforge.config import Settings
 
 @dataclass(frozen=True)
 class Judgment:
-    score: float  # 0.0 - 1.0
+    """One judge's verdict on one item.
+
+    `score` is 0.0-1.0 by convention for *absolute* judges (exact_match,
+    llm_judge, deberta-hallucination): higher is better and the number means
+    something on its own.
+
+    A judge whose model only produces a *relative* signal must not fake that
+    scale. It keeps the scalar (the runner, `/compare`'s `score_delta` and the
+    dashboard all want one number per output) but documents its own range and
+    interpretation in its module docstring — see `reward_judge.py`, whose
+    Bradley-Terry score is unbounded, has an arbitrary additive offset, and is
+    only meaningful when compared against another output on the same prompt.
+    Do not average scores across judges or assume a 0-1 range without checking.
+    """
+
+    score: float
     justification: str | None = None
 
 

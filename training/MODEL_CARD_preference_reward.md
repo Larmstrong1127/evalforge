@@ -14,8 +14,10 @@ pipeline_tag: text-classification
 # DeBERTa-v3 Preference Reward Model
 
 Bradley-Terry reward model for scoring LLM response quality: given a
-`(prompt, response)` text pair, outputs a scalar reward (higher = more
-preferred). Built as part of
+`(prompt, response)` text pair, outputs a scalar reward that is meaningful
+**only relative to another response to the same prompt** (higher = more
+preferred; the scale has an arbitrary additive offset — see
+[Usage](#usage)). Built as part of
 [EvalForge](https://github.com/Larmstrong1127/evalforge), where it runs as
 the `reward` judge — the platform's first judge that needs no golden answer.
 
@@ -47,15 +49,60 @@ Raw Bradley-Terry logits are arbitrarily scaled, so a scalar temperature
 `sigmoid(margin / T)`) at the same 512-token budget used for training, and
 stored in `config.json` as `reward_temperature` (with the budget it was fit
 under alongside it as `reward_train_max_length`; see Correction below).
-Recommended normalized score: `sigmoid(logit / T)`. Pairwise accuracy is
-invariant to T; only score granularity depends on it.
+
+Because T was fit on **margins**, the quantity it calibrates is
+`sigmoid((r_a - r_b) / T)` — the probability that A is preferred to B for the
+same prompt. It does **not** calibrate `sigmoid(r / T)` for a single response;
+see the warning under [Usage](#usage). Pairwise accuracy is invariant to T;
+only the sharpness of the probability depends on it.
 
 ## Evaluation, honestly
 
-| Split | N | Pairwise accuracy |
-|---|---|---|
-| UltraFeedback `test_prefs` (in-distribution) | 1,987 | **0.7026** |
-| Human OOD probe (EvalForge rating room) | 15 | 0.4000 |
+All rows below are the **same split** (UltraFeedback `test_prefs`, N=1,987
+after the truncation audit) run through the **same harness**
+(`training/eval_reward.py` and `training/eval_reward_baseline.py`, which share
+`evaluate_pairs`), at each model's own 512-token budget — except where noted.
+
+| Model / split | Params | N | Pairwise accuracy |
+|---|---|---|---|
+| Chance floor (balanced binary choice) | — | — | 0.5000 |
+| `OpenAssistant/reward-model-deberta-v3-large-v2` (public baseline) | 435M | 1,987 | 0.6009 |
+| lr 5e-5 run (collapsed, discarded) | 184M | 1,987 | 0.5098 |
+| **This model** — UltraFeedback `test_prefs` (in-distribution) | 184M | 1,987 | **0.7026** |
+| Human OOD probe (EvalForge rating room) | 184M | 15 | 0.4000 |
+
+### Reading the baseline row honestly
+
+This model beats a public reward model 2.4x its size by **+10.2 points**, and
+that comparison is **not** a claim that it is the better reward model. It is
+in-distribution and the baseline is out-of-distribution:
+
+- This model was trained on UltraFeedback `train_prefs` and is being scored on
+  UltraFeedback `test_prefs`. Same annotator (an LLM), same prompt mix, same
+  elaboration conventions.
+- `reward-model-deberta-v3-large-v2` was trained on a different preference
+  mixture entirely (WebGPT, summarize-from-feedback, synthetic-instruct,
+  Anthropic HH). UltraFeedback is a distribution shift for it.
+
+So the correct reading is: **0.7026 is a real number, not a collapsed one**
+(the floor is 0.5000 and a lr-sweep failure sat at 0.5098), and a strong public
+model transferred onto this distribution lands at 0.6009. The honest inverse of
+this result is already reported above — on the human OOD probe *this* model
+drops to chance. Neither model generalizes for free; each is good on the
+distribution it was fit to.
+
+The tradeoff this project deliberately explored is a **small, local, free**
+judge (184M, ~40ms/response on CPU, no API key, no per-call cost) against
+larger models and hosted LLM judges. The baseline row exists so that tradeoff
+is stated with a number instead of asserted.
+
+Reproduce:
+
+```bash
+python training/eval_reward.py --checkpoint checkpoints/reward-lr2e5
+python training/eval_reward_baseline.py \
+    --model OpenAssistant/reward-model-deberta-v3-large-v2
+```
 
 The OOD probe is 15 genuine blind A/B votes by one human rater on real
 llama3.2-vs-qwen2.5:14b outputs collected in EvalForge's rating room. At
@@ -111,6 +158,10 @@ and the regime it was fit under travel together with the weights.
 - **Not personalized** — it does not model any individual rater; the OOD
   probe is at chance.
 - **512-token cap**; longer `(prompt, response)` pairs truncate.
+- **No absolute scale.** Bradley-Terry identifies rewards only up to an
+  additive constant, so a single score cannot be thresholded, averaged across
+  a dataset, or compared across prompts. Only within-prompt comparisons are
+  validated.
 
 ## What didn't work
 
@@ -128,18 +179,70 @@ repository.
 
 ## Usage
 
+This model is validated for **pairwise comparison**. Score two candidate
+responses to the same prompt and compare them; the calibrated temperature
+converts the *margin* into a preference probability.
+
 ```python
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 repo = "DantheMan124/deberta-preference-reward"
 tok = AutoTokenizer.from_pretrained(repo)
-model = AutoModelForSequenceClassification.from_pretrained(repo)
-T = model.config.reward_temperature
+model = AutoModelForSequenceClassification.from_pretrained(repo).eval()
+T = model.config.reward_temperature            # 1.1668
+MAX_LEN = model.config.reward_train_max_length  # 512
 
-enc = tok("What causes seasons?", "The tilt of Earth's axis...",
-          truncation=True, max_length=512, return_tensors="pt")
-with torch.no_grad():
-    raw = model(**enc).logits.squeeze().item()
-score = torch.sigmoid(torch.tensor(raw / T)).item()  # 0..1, higher = better
+
+def reward(prompt: str, response: str) -> float:
+    """Raw Bradley-Terry score.
+
+    Meaningful ONLY relative to another response to the SAME prompt -- the
+    scale carries an arbitrary additive offset. Encoded exactly as training
+    pairs were: the prompt and the response as the two segments of one
+    sequence pair, right-truncated to the training budget.
+    """
+    enc = tok(prompt, response, truncation=True, max_length=MAX_LEN,
+              return_tensors="pt")
+    with torch.no_grad():
+        return model(**enc).logits.squeeze().item()
+
+
+prompt = "What causes seasons?"
+a = ("Earth's axis is tilted about 23.5 degrees relative to its orbital "
+     "plane, so each hemisphere receives sunlight at a steeper angle for "
+     "part of the year.")
+b = "Because the Earth gets closer to the Sun in summer."
+
+r_a, r_b = reward(prompt, a), reward(prompt, b)
+p_a = torch.sigmoid(torch.tensor((r_a - r_b) / T)).item()
+print(f"r_a={r_a:.4f}  r_b={r_b:.4f}  margin={r_a - r_b:.4f}")
+print(f"P(A preferred over B) = {p_a:.3f}")
 ```
+
+Verified output on this checkpoint:
+
+```text
+r_a=-1.0902  r_b=-2.3133  margin=1.2231
+P(A preferred over B) = 0.740
+```
+
+> ### ⚠️ Do not use a single score as an absolute quality measure
+>
+> `reward(prompt, response)` on its own is **not** a calibrated 0-1 quality
+> score, and `sigmoid(reward / T)` is not the probability of anything.
+>
+> - Bradley-Terry training only ever sees `r_chosen - r_rejected`, so the
+>   objective is **invariant to adding a constant to every reward**. The zero
+>   point is arbitrary. Note that both scores in the example above are
+>   *negative* even though A is the good answer — the sign carries no meaning.
+> - **T was fit on pairwise margins** (minimizing NLL of
+>   `sigmoid(margin / T)`), so applying it to a bare logit uses a calibration
+>   constant outside the quantity it was calibrated on.
+> - The model's only validated metric is **pairwise accuracy**. Comparisons
+>   between two responses to the same prompt are in-distribution for how it
+>   was trained, evaluated, and calibrated; absolute scores are not.
+>
+> Ranking N candidates for one prompt is fine (the scores are a valid ordering
+> within a prompt). Comparing scores *across different prompts*, thresholding
+> them, or averaging them over a dataset is not.
