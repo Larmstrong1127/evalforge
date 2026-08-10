@@ -108,6 +108,25 @@ _The benchmark table above is generated from
 [`training/scripts/gen_results_table.py`](training/scripts/gen_results_table.py) —
 the numbers are reproducibly derived, not hand-typed._
 
+**Audit note (2026-08-09) — what the 47.5% does and does not measure.**
+"Agreement" is plain accuracy against RAGTruth's ground-truth labels, not
+inter-judge agreement, and the figure reproduces exactly on re-run. But an
+audit of the measurement protocol
+([`training/scripts/diagnose_ragtruth_agreement.py`](training/scripts/diagnose_ragtruth_agreement.py))
+found the protocol itself is flawed: the judge encodes each example as
+`Q: … C: … A: …` and truncates at 512 tokens from the right, so on
+**102 of the 200 examples (51%) the ANSWER — the only thing being
+classified — is cut off entirely before the model sees it**, and on a
+further 30 (15%) it is partially cut. The number is arithmetically correct
+under its stated protocol and should be read as a lower bound on a broken
+protocol, not as a clean measurement of the judge. Re-running with an
+answer-preserving encoding (truncate the context, keep question and answer
+whole) raises ROC-AUC from 0.444 to 0.603 but does **not** beat the
+majority-class baseline: best achievable accuracy is 60.5% either way,
+against a 61.0% all-faithful baseline. The judge has weak ranking signal on
+RAGTruth and no usable operating point — consistent with the disclosed
+OOD F1 of ~0.51, and a stronger statement of the same limitation.
+
 Free and 43x faster, but not a drop-in replacement for a paid judge on
 out-of-distribution data — its realistic role today is a cheap first-pass
 filter. Full methodology, training curves, and a candid **"what didn't

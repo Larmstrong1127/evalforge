@@ -11,6 +11,13 @@ is the current entry here.
 
 # (input $/M, output $/M) — snapshot 2026-07
 _PRICES: dict[str, tuple[float, float]] = {
+    # Anthropic list prices, snapshot 2026-08-09. claude-sonnet-5 carries an
+    # introductory $2.00/$10.00 rate through 2026-08-31; the standard $3/$15
+    # is used here so a benchmark run does not silently under-report cost once
+    # the promotion lapses.
+    "claude-fable-5": (10.0, 50.0),
+    "claude-opus-5": (5.0, 25.0),
+    "claude-opus-4-8": (5.0, 25.0),
     "claude-sonnet-5": (3.0, 15.0),
     "claude-haiku-4-5-20251001": (1.0, 5.0),
     "gpt-4o": (2.5, 10.0),

@@ -76,6 +76,20 @@ is in the [training README](https://github.com/Larmstrong1127/evalforge/tree/mas
 - **Learns a dataset artifact, not "hallucination" in general** — it keys on
   HaluEval's synthetic-hallucination style, which real systems do not share.
 - **English QA only**, and capped at 512 tokens (longer contexts truncate).
+- **The 512-token cap silently removes the answer on long inputs.** Inputs
+  are encoded as `Q: {question} C: {context} A: {answer}` and truncated from
+  the right, so once question + context exceed the window the answer — the
+  span actually being judged — is dropped before the model sees it. On the
+  200-example RAGTruth benchmark sample this affects 51% of examples fully
+  and a further 15% partially (measured 2026-08-09 by
+  `training/scripts/diagnose_ragtruth_agreement.py`). If you feed this model
+  long RAG contexts, budget the context so the answer survives, or the task
+  is unanswerable as posed.
+- **No usable operating point on RAGTruth.** ROC-AUC is 0.44 as benchmarked
+  and 0.60 with an answer-preserving encoding; even at the best
+  threshold-swept operating point accuracy tops out at 60.5% against a 61.0%
+  all-faithful majority baseline. Treat RAGTruth-like traffic as
+  out-of-scope rather than as a lower-accuracy mode.
 - **Uncalibrated on real data** — do not treat its probabilities as reliable
   confidences outside HaluEval-like inputs.
 
