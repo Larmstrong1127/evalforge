@@ -8,6 +8,11 @@ human preference votes, and diff any two runs to catch regressions.
 [![CI](https://github.com/Larmstrong1127/evalforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Larmstrong1127/evalforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+Two models were trained for this platform rather than merely called:
+
+- **[Preference reward model](https://huggingface.co/DantheMan124/deberta-preference-reward)** — DeBERTa-v3 Bradley-Terry, hand-written dual-forward PyTorch loop, 184M params. **0.7026** pairwise accuracy on a held-out UltraFeedback split vs **0.6009** for `OpenAssistant/reward-model-deberta-v3-large-v2` (435M) scored on the same 1,987 pairs. Caveat, stated up front: that split is in-distribution for this model and out-of-distribution for the baseline — [full honest write-up below](#the-preference-reward-model-honestly).
+- **[Hallucination judge](https://huggingface.co/DantheMan124/deberta-hallucination-judge)** — runs locally at 27 ms and $0.00 per call, wired in as a first-class judge.
+
 ```mermaid
 flowchart TB
     D["Dashboard — Next.js + TypeScript<br/>suites · runs & results · costs · blind A/B rating room · run-vs-run compare"]
