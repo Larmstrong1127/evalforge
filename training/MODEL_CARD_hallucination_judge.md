@@ -76,20 +76,52 @@ is in the [training README](https://github.com/Larmstrong1127/evalforge/tree/mas
 - **Learns a dataset artifact, not "hallucination" in general** — it keys on
   HaluEval's synthetic-hallucination style, which real systems do not share.
 - **English QA only**, and capped at 512 tokens (longer contexts truncate).
-- **The 512-token cap silently removes the answer on long inputs.** Inputs
-  are encoded as `Q: {question} C: {context} A: {answer}` and truncated from
-  the right, so once question + context exceed the window the answer — the
-  span actually being judged — is dropped before the model sees it. On the
-  200-example RAGTruth benchmark sample this affects 51% of examples fully
-  and a further 15% partially (measured 2026-08-09 by
-  `training/scripts/diagnose_ragtruth_agreement.py`). If you feed this model
-  long RAG contexts, budget the context so the answer survives, or the task
-  is unanswerable as posed.
-- **No usable operating point on RAGTruth.** ROC-AUC is 0.44 as benchmarked
-  and 0.60 with an answer-preserving encoding; even at the best
-  threshold-swept operating point accuracy tops out at 60.5% against a 61.0%
-  all-faithful majority baseline. Treat RAGTruth-like traffic as
-  out-of-scope rather than as a lower-accuracy mode.
+- **The 512-token cap silently removed the answer on long inputs — fixed in
+  serving on 2026-08-13.** Inputs were encoded as
+  `Q: {question} C: {context} A: {answer}` and truncated from the right, so
+  once question + context exceeded the window the answer — the span actually
+  being judged — was dropped before the model saw it. On the 200-example
+  RAGTruth benchmark sample this affected 50.5% of examples fully and a
+  further 15.5% partially (measured 2026-08-09 by
+  `training/scripts/diagnose_ragtruth_agreement.py`).
+  **Fixed in serving on 2026-08-13; re-measured:** EvalForge now encodes
+  through a shared answer-preserving encoder that budgets the CONTEXT and
+  keeps question and answer whole, so the answer is fully deleted on 0/200
+  and partially deleted on 0/200 of the same sample. **The model weights are
+  unchanged** — this is an inference-time encoding fix, and inputs that
+  already fit inside the budget are encoded exactly as before. If you call
+  this checkpoint directly rather than through EvalForge, you must budget the
+  context yourself, or the task is unanswerable as posed; see
+  `evalforge/judges/hallucination_encoding.py` in the repo for a reference
+  implementation.
+- **Still no usable operating point on RAGTruth — the fix improved ranking,
+  not accuracy.** Re-measured 2026-08-13 on the identical sample (n=200,
+  seed 42, CPU, local judge only):
+
+  | | legacy encoding | answer-preserving (shipped) |
+  |---|---|---|
+  | ROC-AUC | 0.444 | 0.603 |
+  | F1 at the best-accuracy operating point | 0.092 | 0.615 |
+  | best F1 at any threshold | 0.566 | 0.627 |
+  | best achievable accuracy | 0.605 | 0.605 |
+  | accuracy at the naive 0.5 threshold | 0.475 | 0.385 |
+  | majority-class (all-faithful) baseline | 0.610 | 0.610 |
+
+  The gain is in RANKING quality: the model can now order examples by
+  hallucination risk meaningfully better than chance, and an F1 that was
+  effectively dead at the best-accuracy threshold (0.09) becomes usable
+  (0.61). It is **not** an accuracy gain. Best achievable accuracy is
+  unchanged at 60.5% and remains *below* the 61.0% all-faithful baseline,
+  and accuracy at a naive 0.5 cut is worse than before because the corrected
+  encoding compresses nearly every score above 0.99 (any deployment must
+  therefore tune its threshold on the empirical score distribution, not
+  assume 0.5).
+  **The prior guidance is re-evaluated and stands: treat RAGTruth-like
+  traffic as out-of-scope rather than as a lower-accuracy mode.** A
+  classifier that cannot beat "predict faithful for everything" has no
+  operating point worth deploying, however well it ranks. What the fix
+  changed is that this number now measures the model rather than a
+  measurement bug.
 - **Uncalibrated on real data** — do not treat its probabilities as reliable
   confidences outside HaluEval-like inputs.
 
@@ -111,6 +143,19 @@ text = "Q: What is the capital of France? C: France is in Europe. A: Paris"
 inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
 logits = model(**inputs).logits
 pred = logits.argmax(dim=-1).item()  # 0 = faithful, 1 = hallucinated
+```
+
+**This snippet is only safe while the whole triple fits in 512 tokens.**
+`truncation=True` cuts from the RIGHT, and the answer is on the right — with
+a real RAG context it is silently deleted before the model sees it (see
+Limitations). For anything longer, budget the context and keep the question
+and answer whole. EvalForge ships that as
+[`hallucination_encoding.encode_qca`](https://github.com/Larmstrong1127/evalforge/blob/master/platform/api/evalforge/judges/hallucination_encoding.py):
+
+```python
+from evalforge.judges.hallucination_encoding import encode_qca
+
+inputs = encode_qca(tokenizer, question, context, answer, 512, return_tensors="pt")
 ```
 
 ## Labels

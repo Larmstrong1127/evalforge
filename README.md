@@ -127,6 +127,50 @@ against a 61.0% all-faithful baseline. The judge has weak ranking signal on
 RAGTruth and no usable operating point — consistent with the disclosed
 OOD F1 of ~0.51, and a stronger statement of the same limitation.
 
+**Fixed in serving on 2026-08-13; re-measured.** The answer-preserving
+encoding now *is* the serving encoding
+([`hallucination_encoding.py`](platform/api/evalforge/judges/hallucination_encoding.py),
+mirrored from
+[`training/training/hallucination_encoding.py`](training/training/hallucination_encoding.py)
+and shared by training, eval and the judge), and the sequence budget is
+derived from the checkpoint config rather than hardcoded. Re-run on the
+identical sample (n=200, seed 42, `checkpoints/lr-2e5`, CPU, local judge
+only — no paid judge was re-called, and an encoding change on the local
+model cannot move their rows):
+
+| | as benchmarked (legacy) | fixed encoding |
+|---|---|---|
+| answer fully deleted | 101/200 (50.5%) | **0** |
+| answer partially deleted | 31/200 (15.5%) | **0** |
+| ROC-AUC | 0.444 | **0.603** |
+| F1 at the best-accuracy operating point | 0.092 | **0.615** |
+| best F1 at any threshold | 0.566 | **0.627** |
+| best achievable accuracy | 0.605 | 0.605 |
+| accuracy at the naive 0.5 threshold | 0.475 | 0.385 |
+| majority-class (all-faithful) baseline | 0.610 | 0.610 |
+
+Read that honestly: **the fix buys ranking quality, not accuracy.** The
+model can now order examples by hallucination risk far better than chance
+(AUC 0.44 → 0.60) and an F1 that was effectively dead at the best-accuracy
+threshold becomes usable (0.09 → 0.61). But best achievable accuracy is
+unchanged at 60.5% and still *below* the 61.0% all-faithful baseline, and
+raw accuracy at a naive 0.5 cut actually gets worse, because the corrected
+encoding compresses nearly every score above 0.99. The pre-existing guidance
+therefore stands unchanged: **treat RAGTruth-like traffic as out of scope
+for this judge**, not as a lower-accuracy mode. What changed is that the
+number is now measuring the model instead of measuring a bug. Both runs are
+recorded under labelled keys in
+[`training/ragtruth_diagnostic.json`](training/ragtruth_diagnostic.json); the
+original 2026-08-09 top-level keys are untouched.
+
+The **47.5% in the table above is left as-is**, and is the legacy-encoding
+measurement. It is not restated with the fixed encoding because doing so
+honestly would mean publishing 38.5% — accuracy at the model's default argmax
+cut, which the fix makes *worse* even as it makes the ranking better — and
+because the cloud rows it is compared against were measured under that
+protocol and were deliberately not re-run (no paid API calls). The comparison
+that matters after the fix is the table immediately above, not this one.
+
 Free and 43x faster, but not a drop-in replacement for a paid judge on
 out-of-distribution data — its realistic role today is a cheap first-pass
 filter. Full methodology, training curves, and a candid **"what didn't
@@ -150,9 +194,11 @@ and wired into the platform as the `deberta-hallucination` judge
 
 ## Quality
 
-- **Tests:** 76 backend (pytest, incl. a regression test reproducing a real
-  FastAPI `BackgroundTasks`/session-commit ordering bug with two separate DB
-  engines), 50 training, 10 frontend (vitest). Backend and dashboard are
+- **Tests:** 197 total — 95 backend (pytest, incl. a regression test
+  reproducing a real FastAPI `BackgroundTasks`/session-commit ordering bug
+  with two separate DB engines), 92 training (incl. a cross-package drift
+  guard that loads the platform's copy of the judge encoding from disk and
+  asserts it is identical to the training copy), 10 frontend (vitest). Backend and dashboard are
   `ruff`/`mypy --strict` and `eslint`/`tsc` clean; the training package is
   `ruff` clean but its ML-heavy scripts (`train.py`, `evaluate.py`,
   `benchmark.py`) aren't run under `--strict` since third-party ML APIs
