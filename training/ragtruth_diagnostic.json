@@ -94,5 +94,247 @@
     "auc_length_predicts_label": 0.7270912147961328,
     "auc_score_predicts_long": 0.25032503250325033,
     "majority_class_baseline_overall": 0.61
+  },
+  "rerun_2026_08_13_fixed_encoding": {
+    "checkpoint": "checkpoints\\lr-2e5",
+    "encoding": "answer-preserving",
+    "device": "cpu",
+    "n": 200,
+    "max_length_used": 512,
+    "accuracy_as_published": 0.385,
+    "accuracy_under_label_inversion": 0.615,
+    "label_balance": {
+      "hallucinated_1": 78,
+      "faithful_0": 122,
+      "positive_rate": 0.39
+    },
+    "prediction_balance": {
+      "predicted_hallucinated_1": 199,
+      "predicted_faithful_0": 1,
+      "positive_rate": 0.995
+    },
+    "score_stats": {
+      "min": 0.17691604793071747,
+      "max": 0.9999334812164307,
+      "mean": 0.9936622896045446,
+      "n_distinct_rounded_2dp": 5
+    },
+    "roc_auc": 0.6034573350147121,
+    "best_accuracy": {
+      "threshold": 0.99,
+      "accuracy": 0.4,
+      "precision": 0.3917525773195876,
+      "recall": 0.9743589743589743,
+      "f1": 0.5588235294117646
+    },
+    "best_f1": {
+      "threshold": 0.01,
+      "accuracy": 0.39,
+      "precision": 0.39,
+      "recall": 1.0,
+      "f1": 0.5611510791366906
+    },
+    "best_accuracy_score_grid": {
+      "threshold": 0.9997748732566833,
+      "accuracy": 0.605,
+      "precision": 0.49606299212598426,
+      "recall": 0.8076923076923077,
+      "f1": 0.6146341463414634
+    },
+    "best_f1_score_grid": {
+      "threshold": 0.9996625185012817,
+      "accuracy": 0.565,
+      "precision": 0.47096774193548385,
+      "recall": 0.9358974358974359,
+      "f1": 0.6266094420600858
+    },
+    "at_threshold_0_5": {
+      "threshold": 0.5,
+      "accuracy": 0.385,
+      "precision": 0.3869346733668342,
+      "recall": 0.9871794871794872,
+      "f1": 0.555956678700361
+    },
+    "truncation": {
+      "n_truncated": 132,
+      "fraction_truncated": 0.66,
+      "median_token_length": 663,
+      "max_token_length": 1972
+    },
+    "answer_truncation": {
+      "n_answer_fully_dropped": 0,
+      "fraction_answer_fully_dropped": 0.0,
+      "n_answer_partially_dropped": 0,
+      "fraction_answer_partially_dropped": 0.0
+    },
+    "subgroup_untruncated": {
+      "n": 68,
+      "roc_auc": 0.7104895104895105,
+      "accuracy_as_published": 0.19117647058823528,
+      "positive_rate": 0.19117647058823528,
+      "majority_class_baseline": 0.8088235294117647,
+      "best_accuracy": {
+        "threshold": 0.99,
+        "accuracy": 0.25,
+        "precision": 0.203125,
+        "recall": 1.0,
+        "f1": 0.33766233766233766
+      },
+      "best_f1": {
+        "threshold": 0.99,
+        "accuracy": 0.25,
+        "precision": 0.203125,
+        "recall": 1.0,
+        "f1": 0.33766233766233766
+      }
+    },
+    "subgroup_truncated": {
+      "n": 132,
+      "roc_auc": 0.6288174512055109,
+      "accuracy_as_published": 0.48484848484848486,
+      "positive_rate": 0.49242424242424243,
+      "majority_class_baseline": 0.5075757575757576,
+      "best_accuracy": {
+        "threshold": 0.01,
+        "accuracy": 0.49242424242424243,
+        "precision": 0.49242424242424243,
+        "recall": 1.0,
+        "f1": 0.6598984771573604
+      },
+      "best_f1": {
+        "threshold": 0.01,
+        "accuracy": 0.49242424242424243,
+        "precision": 0.49242424242424243,
+        "recall": 1.0,
+        "f1": 0.6598984771573604
+      }
+    },
+    "length_confound": {
+      "auc_length_predicts_label": 0.7270912147961328,
+      "auc_score_predicts_long": 0.5484048404840484,
+      "majority_class_baseline_overall": 0.61
+    },
+    "protocol_note": "Re-measurement after the answer-preserving encoding shipped to the serving path. Date 2026-08-13. Device: CPU (the 3090 was held by an unrelated workload; device does not affect the metrics). LOCAL judge only -- no cloud/paid judge was re-run, their rows in training/benchmark_results.json are unaffected by an encoding change on the local model and are left exactly as measured. Same checkpoint (checkpoints/lr-2e5), same SAMPLE_SIZE=200, same SEED=42, same random.Random(SEED).sample call as the 2026-08-09 run recorded in the top-level keys of this file. The top-level keys are the historical record and were NOT modified. Note on threshold sweeps: the fixed encoding compresses P(hallucinated) into a narrow band near 1.0, so the original fixed 0.01 threshold grid (best_accuracy/best_f1) cannot resolve an operating point inside it; best_accuracy_score_grid/best_f1_score_grid sweep the empirical score values instead and are the numbers to read."
+  },
+  "rerun_2026_08_13_legacy_encoding_control": {
+    "checkpoint": "checkpoints\\lr-2e5",
+    "encoding": "legacy",
+    "device": "cpu",
+    "n": 200,
+    "max_length_used": 512,
+    "accuracy_as_published": 0.475,
+    "accuracy_under_label_inversion": 0.525,
+    "label_balance": {
+      "hallucinated_1": 78,
+      "faithful_0": 122,
+      "positive_rate": 0.39
+    },
+    "prediction_balance": {
+      "predicted_hallucinated_1": 151,
+      "predicted_faithful_0": 49,
+      "positive_rate": 0.755
+    },
+    "score_stats": {
+      "min": 0.06080164760351181,
+      "max": 0.9999334812164307,
+      "mean": 0.74922119256109,
+      "n_distinct_rounded_2dp": 67
+    },
+    "roc_auc": 0.4440941572089113,
+    "best_accuracy": {
+      "threshold": 0.64,
+      "accuracy": 0.495,
+      "precision": 0.41843971631205673,
+      "recall": 0.7564102564102564,
+      "f1": 0.5388127853881278
+    },
+    "best_f1": {
+      "threshold": 0.08,
+      "accuracy": 0.4,
+      "precision": 0.3939393939393939,
+      "recall": 1.0,
+      "f1": 0.5652173913043478
+    },
+    "best_accuracy_score_grid": {
+      "threshold": 0.9999163150787354,
+      "accuracy": 0.605,
+      "precision": 0.4444444444444444,
+      "recall": 0.05128205128205128,
+      "f1": 0.09195402298850575
+    },
+    "best_f1_score_grid": {
+      "threshold": 0.2190987765789032,
+      "accuracy": 0.44,
+      "precision": 0.40555555555555556,
+      "recall": 0.9358974358974359,
+      "f1": 0.5658914728682171
+    },
+    "at_threshold_0_5": {
+      "threshold": 0.5,
+      "accuracy": 0.475,
+      "precision": 0.4105960264900662,
+      "recall": 0.7948717948717948,
+      "f1": 0.5414847161572052
+    },
+    "truncation": {
+      "n_truncated": 132,
+      "fraction_truncated": 0.66,
+      "median_token_length": 663,
+      "max_token_length": 1972
+    },
+    "answer_truncation": {
+      "n_answer_fully_dropped": 101,
+      "fraction_answer_fully_dropped": 0.505,
+      "n_answer_partially_dropped": 31,
+      "fraction_answer_partially_dropped": 0.155
+    },
+    "subgroup_untruncated": {
+      "n": 68,
+      "roc_auc": 0.7104895104895105,
+      "accuracy_as_published": 0.19117647058823528,
+      "positive_rate": 0.19117647058823528,
+      "majority_class_baseline": 0.8088235294117647,
+      "best_accuracy": {
+        "threshold": 0.99,
+        "accuracy": 0.25,
+        "precision": 0.203125,
+        "recall": 1.0,
+        "f1": 0.33766233766233766
+      },
+      "best_f1": {
+        "threshold": 0.99,
+        "accuracy": 0.25,
+        "precision": 0.203125,
+        "recall": 1.0,
+        "f1": 0.33766233766233766
+      }
+    },
+    "subgroup_truncated": {
+      "n": 132,
+      "roc_auc": 0.6385763490241102,
+      "accuracy_as_published": 0.6212121212121212,
+      "positive_rate": 0.49242424242424243,
+      "majority_class_baseline": 0.5075757575757576,
+      "best_accuracy": {
+        "threshold": 0.64,
+        "accuracy": 0.6515151515151515,
+        "precision": 0.6301369863013698,
+        "recall": 0.7076923076923077,
+        "f1": 0.6666666666666666
+      },
+      "best_f1": {
+        "threshold": 0.45,
+        "accuracy": 0.6212121212121212,
+        "precision": 0.5842696629213483,
+        "recall": 0.8,
+        "f1": 0.6753246753246754
+      }
+    },
+    "length_confound": {
+      "auc_length_predicts_label": 0.7270912147961328,
+      "auc_score_predicts_long": 0.25032503250325033,
+      "majority_class_baseline_overall": 0.61
+    },
+    "protocol_note": "CONTROL: the original right-truncated flat encoding, re-run 2026-08-13 on CPU under the identical protocol as rerun_2026_08_13_fixed_encoding, so the two are comparable on the same threshold-sweep methodology. Reproduces the 2026-08-09 headline numbers (accuracy 0.475, ROC-AUC 0.444) exactly. LOCAL judge only; no paid judge was called."
   }
 }
