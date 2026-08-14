@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch  # noqa: E402
 from evalforge.config import Settings  # noqa: E402
 from evalforge.judges import get_judge  # noqa: E402
 from evalforge.judges.deberta_judge import DebertaJudge  # noqa: E402
+from tests.fake_tokenizer import FakeTokenizer  # noqa: E402
 
 SETTINGS = Settings()
 
@@ -38,11 +39,11 @@ async def test_score_returns_faithfulness_not_hallucination_probability(
 ):
     import torch
 
-    fake_tokenizer = MagicMock()
-    fake_tokenizer.return_value = {
-        "input_ids": torch.zeros((1, 4), dtype=torch.long),
-        "attention_mask": torch.ones((1, 4), dtype=torch.long),
-    }
+    # A real-shaped tokenizer, not a blanket MagicMock: the judge now routes
+    # through encode_qca, which asks the tokenizer real questions (what are
+    # your special tokens? how long is this segment?) and a MagicMock answers
+    # all of them with the same lie.
+    fake_tokenizer = FakeTokenizer()
     mock_tok_cls.from_pretrained.return_value = fake_tokenizer
 
     fake_model = MagicMock()
@@ -73,11 +74,11 @@ async def test_score_returns_faithfulness_not_hallucination_probability(
 async def test_model_loaded_once_and_reused_across_calls(mock_tok_cls, mock_model_cls):
     import torch
 
-    fake_tokenizer = MagicMock()
-    fake_tokenizer.return_value = {
-        "input_ids": torch.zeros((1, 4), dtype=torch.long),
-        "attention_mask": torch.ones((1, 4), dtype=torch.long),
-    }
+    # A real-shaped tokenizer, not a blanket MagicMock: the judge now routes
+    # through encode_qca, which asks the tokenizer real questions (what are
+    # your special tokens? how long is this segment?) and a MagicMock answers
+    # all of them with the same lie.
+    fake_tokenizer = FakeTokenizer()
     mock_tok_cls.from_pretrained.return_value = fake_tokenizer
 
     fake_model = MagicMock()
@@ -93,3 +94,48 @@ async def test_model_loaded_once_and_reused_across_calls(mock_tok_cls, mock_mode
 
     # loaded once at construction/first use, not once per score() call
     assert mock_model_cls.from_pretrained.call_count == 1
+
+
+@patch("evalforge.judges.deberta_judge.AutoModelForSequenceClassification")
+@patch("evalforge.judges.deberta_judge.AutoTokenizer")
+async def test_answer_is_never_truncated_away_by_a_long_context(mock_tok_cls, mock_model_cls):
+    """The regression this judge shipped with for months: `Q: … C: … A: …`
+    truncated from the right deleted the answer — the only span being
+    classified — on 51% of the RAGTruth benchmark sample. Assert on the ids
+    the model actually receives, not on the judge's returned score."""
+    import torch
+
+    fake_tokenizer = FakeTokenizer()
+    mock_tok_cls.from_pretrained.return_value = fake_tokenizer
+
+    seen: dict[str, torch.Tensor] = {}
+
+    fake_model = MagicMock()
+    fake_model.to.return_value = fake_model
+    fake_model.config = MagicMock(spec=[])  # no length keys -> judge falls back to 512
+
+    def capture(**kwargs):
+        seen.update(kwargs)
+        out = MagicMock()
+        out.logits = torch.tensor([[5.0, 0.0]])
+        return out
+
+    fake_model.side_effect = capture
+    mock_model_cls.from_pretrained.return_value = fake_model
+
+    context = " ".join(f"filler{i}" for i in range(4000))
+    await judge_score_with(DebertaJudge(SETTINGS), context)
+
+    ids = seen["input_ids"].squeeze(0).tolist()
+    words = fake_tokenizer.decode_words(ids)
+    assert len(ids) <= 512
+    for word in ("the", "capital", "is", "Berlin"):
+        assert word in words
+
+
+async def judge_score_with(judge, context):
+    return await judge.score(
+        prompt="What is the capital of France?",
+        expected=context,
+        output="the capital is Berlin",
+    )
