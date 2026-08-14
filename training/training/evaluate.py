@@ -12,6 +12,7 @@ from transformers import AutoModelForSequenceClassification
 
 from training.data.prepare import Example, load_halueval_examples, split_train_val
 from training.data.ragtruth import load_ragtruth_examples
+from training.hallucination_encoding import encode_qca
 from training.metrics import compute_classification_metrics, expected_calibration_error
 from training.models.classifier import build_tokenizer
 
@@ -41,8 +42,9 @@ def _score_examples(
 
     with torch.no_grad():
         for ex in examples:
-            text = f"Q: {ex.question} C: {ex.context} A: {ex.answer}"
-            inputs = tokenizer(text, truncation=True, max_length=max_length, return_tensors="pt")
+            inputs = encode_qca(
+                tokenizer, ex.question, ex.context, ex.answer, max_length, return_tensors="pt"
+            )
             inputs = {k: v.to(device) for k, v in inputs.items()}
             logits = model(**inputs).logits
             probs = torch.softmax(logits, dim=-1).squeeze(0)

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
+from tests.test_hallucination_encoding import FakeTokenizer
 from training.evaluate import EvaluationResult, evaluate_checkpoint
 
 
@@ -30,11 +31,10 @@ def test_evaluate_checkpoint_reports_both_distributions(
     fake_model.to.return_value = fake_model
     mock_model_cls.from_pretrained.return_value = fake_model
 
-    fake_tok = MagicMock()
-    fake_tok.return_value = {
-        "input_ids": torch.zeros((1, 4), dtype=torch.long),
-        "attention_mask": torch.ones((1, 4), dtype=torch.long),
-    }
+    # A real-shaped tokenizer, not a blanket MagicMock: evaluation now routes
+    # through encode_qca, which interrogates the tokenizer (special tokens,
+    # per-segment lengths) and a MagicMock answers every question the same way.
+    fake_tok = FakeTokenizer()
     mock_tokenizer.return_value = fake_tok
 
     result = evaluate_checkpoint(
@@ -58,11 +58,16 @@ def test_evaluate_checkpoint_threads_custom_max_length(
 ):
     from training.data.prepare import Example
 
-    mock_ragtruth.return_value = [Example(question="q", context="c", answer="a", label=0)]
+    mock_ragtruth.return_value = [
+        Example(question="q " * 200, context="c " * 500, answer="a " * 200, label=0)
+    ]
+
+    seen: list[dict] = []
 
     fake_model = MagicMock()
 
     def fake_call(**kwargs):
+        seen.append(kwargs)
         result = MagicMock()
         result.logits = torch.tensor([[2.0, 0.1]])
         return result
@@ -71,11 +76,10 @@ def test_evaluate_checkpoint_threads_custom_max_length(
     fake_model.to.return_value = fake_model
     mock_model_cls.from_pretrained.return_value = fake_model
 
-    fake_tok = MagicMock()
-    fake_tok.return_value = {
-        "input_ids": torch.zeros((1, 4), dtype=torch.long),
-        "attention_mask": torch.ones((1, 4), dtype=torch.long),
-    }
+    # A real-shaped tokenizer, not a blanket MagicMock: evaluation now routes
+    # through encode_qca, which interrogates the tokenizer (special tokens,
+    # per-segment lengths) and a MagicMock answers every question the same way.
+    fake_tok = FakeTokenizer()
     mock_tokenizer.return_value = fake_tok
 
     evaluate_checkpoint(
@@ -84,5 +88,8 @@ def test_evaluate_checkpoint_threads_custom_max_length(
         max_length=128,
     )
 
-    for call in fake_tok.call_args_list:
-        assert call.kwargs["max_length"] == 128
+    # max_length is now a budget honoured by the encoder rather than a kwarg
+    # forwarded to the tokenizer, so assert on what the model actually saw.
+    assert seen, "the model was never called"
+    for kwargs in seen:
+        assert kwargs["input_ids"].shape[-1] <= 128

@@ -21,6 +21,7 @@ from transformers import DataCollatorWithPadding, get_linear_schedule_with_warmu
 
 from training.config import TrainConfig, load_config
 from training.data.prepare import Example, load_halueval_examples, split_train_val
+from training.hallucination_encoding import encode_qca
 from training.metrics import ClassificationMetrics, compute_classification_metrics
 from training.models.classifier import build_model, build_tokenizer
 
@@ -94,11 +95,8 @@ class ExampleDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict:
         ex = self.examples[idx]
-        text = f"Q: {ex.question} C: {ex.context} A: {ex.answer}"
-        encoding = self.tokenizer(
-            text,
-            truncation=True,
-            max_length=self.max_length,
+        encoding = encode_qca(
+            self.tokenizer, ex.question, ex.context, ex.answer, self.max_length
         )
         return {
             "input_ids": encoding["input_ids"],

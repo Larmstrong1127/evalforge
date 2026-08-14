@@ -66,6 +66,7 @@ async def score_with_local_judge(examples, checkpoint_path: str) -> BenchmarkRes
     import torch
     from transformers import AutoModelForSequenceClassification
 
+    from training.hallucination_encoding import encode_qca
     from training.models.classifier import build_tokenizer
 
     tokenizer = build_tokenizer(checkpoint_path)
@@ -79,8 +80,9 @@ async def score_with_local_judge(examples, checkpoint_path: str) -> BenchmarkRes
     with torch.no_grad():
         for ex in examples:
             start = time.perf_counter()
-            text = f"Q: {ex.question} C: {ex.context} A: {ex.answer}"
-            inputs = tokenizer(text, truncation=True, max_length=512, return_tensors="pt")
+            inputs = encode_qca(
+                tokenizer, ex.question, ex.context, ex.answer, 512, return_tensors="pt"
+            )
             inputs = {k: v.to(device) for k, v in inputs.items()}
             logits = model(**inputs).logits
             predictions.append(int(logits.argmax(dim=-1).item()))
