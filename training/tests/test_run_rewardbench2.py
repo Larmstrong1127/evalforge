@@ -7,6 +7,7 @@ dialogue template reproduces the *training* encoding exactly. The last one is
 the claim the published score rests on, so it is checked token-for-token
 against a real DeBERTa tokenizer when one is available locally.
 """
+import collections
 import importlib.util
 import json
 import sys
@@ -169,3 +170,62 @@ def test_parser_refuses_a_log_with_no_results():
     parser = _load_parser()
     with pytest.raises(SystemExit):
         parser.parse_log("nothing to see here\n")
+
+
+# --- subsample stratification ---------------------------------------------
+
+
+def _load_subsampler():
+    path = REPO_TRAINING / "scripts" / "make_rewardbench2_subsample.py"
+    spec = importlib.util.spec_from_file_location("make_rewardbench2_subsample", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+REAL_DOMAIN_SIZES = {
+    "Factuality": 475,
+    "Focus": 495,
+    "Safety": 450,
+    "Math": 183,
+    "Precise IF": 160,
+    "Ties": 102,
+}
+
+
+def _fake_subsets() -> list[str]:
+    subsets: list[str] = []
+    for domain, size in REAL_DOMAIN_SIZES.items():
+        subsets.extend([domain] * size)
+    return subsets
+
+
+def test_subsample_hits_the_requested_size_exactly():
+    sub = _load_subsampler()
+    subsets = _fake_subsets()
+    picked = sub.stratified_indices(subsets, 450, seed=20260813)
+    assert len(picked) == 450
+    assert len(set(picked)) == 450
+
+
+def test_subsample_keeps_every_domain_in_proportion():
+    """A uniform random sample could miss Ties (102 of 1,865 rows) badly.
+    Stratifying keeps each domain within one row of its proportional share."""
+    sub = _load_subsampler()
+    subsets = _fake_subsets()
+    picked = sub.stratified_indices(subsets, 450, seed=20260813)
+    got = collections.Counter(subsets[i] for i in picked)
+    for domain, size in REAL_DOMAIN_SIZES.items():
+        expected = size * 450 / len(subsets)
+        assert abs(got[domain] - expected) <= 1, (domain, got[domain], expected)
+
+
+def test_subsample_is_deterministic_under_a_seed():
+    sub = _load_subsampler()
+    subsets = _fake_subsets()
+    first = sub.stratified_indices(subsets, 450, seed=20260813)
+    second = sub.stratified_indices(subsets, 450, seed=20260813)
+    other = sub.stratified_indices(subsets, 450, seed=1)
+    assert first == second
+    assert first != other
