@@ -242,6 +242,17 @@ too. What the comparison does establish is the tradeoff the project set out to
 test — a 184M local judge that costs nothing per call, measured against a
 2.4x-larger public model in the same harness instead of asserted.
 
+**RewardBench 2 (third-party, 2026-08-13):** run through the official
+`allenai/reward-bench` harness on the full 1,865-prompt set (best-of-4, random
+baseline 25%), this model averages **25.3** — the random floor — with one
+standout domain (Math 47.1 vs the official 435M OA baseline's 50.3) and the
+rest at or below chance. That is the out-of-distribution boundary measured on
+someone else's benchmark instead of my own probe, and it is disclosed on the
+model card with full protocol (`training/rewardbench2_results.json`). Encoder
+reward models as a class sit near the floor there — the official OA DeBERTa
+scores 32.0 — which is exactly why the card scopes this model to
+UltraFeedback-distribution comparisons and nothing broader.
+
 Note also that the reward score is *relative*: Bradley-Terry identifies rewards
 only up to an additive constant, so only comparisons between two responses to
 the same prompt are meaningful. The `reward` judge's score is the

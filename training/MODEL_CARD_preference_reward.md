@@ -112,6 +112,44 @@ the direction is consistent with the documented length/elaboration bias of
 AI-feedback preference data: **this model predicts UltraFeedback-style
 preferences, not any individual human's.**
 
+## RewardBench 2 (2026-08-13): a third-party number, and it is the floor
+
+I ran the official RewardBench 2 harness (`allenai/reward-bench` @ `05a9005`,
+dataset @ `7ff0885`, 1,865 prompts, best-of-4, random baseline **25%** for the
+five accuracy domains) on this model, unmodified except for a registered
+dialogue template that reproduces the two-segment training encoding
+token-for-token (the stock `raw` template drops the `[SEP]` boundary and
+merges subwords across it). Full protocol and per-domain scores:
+`training/rewardbench2_results.json`. Device: CPU, float32, 1h18m.
+
+| Domain | This model (184M) | OA deberta-v3-large-v2 (435M, official leaderboard) |
+|---|---:|---:|
+| Factuality | 28.8 | 38.5 |
+| Focus | 15.8 | 27.7 |
+| Math | **47.1** | 50.3 |
+| Precise IF | 23.1 | 26.9 |
+| Safety | 35.8 | 36.7 |
+| Ties* | 1.4 | 12.0 |
+| **Average** | **25.3** | **32.0** |
+
+\* Ties uses a margin-based metric with a chance level well below 25%; do not
+read it against the 25% floor.
+
+**Reading this honestly: out of distribution, this model is at the random
+floor.** That is not a surprise — it is the strongest evidence yet for what
+this card already says: the model predicts UltraFeedback-style preferences
+and does not transfer. The official 435M OpenAssistant DeBERTa — the baseline
+this model beats by 10 points in-distribution — manages 32.0 here, and
+encoder-class reward models as a category sit near the floor on this
+benchmark (the strong entries, 61–84, are all modern decoder-based
+classifiers). The one domain where a 184M encoder holds up is Math: 47.1,
+within three points of the 435M baseline at 40% of the size.
+
+If you need a general-purpose reward model, use one from the RewardBench 2
+leaderboard. If you need a small, free, CPU-viable judge for
+UltraFeedback-distribution comparisons, that is the niche this model
+occupies, and these numbers mark its boundary precisely.
+
 ## Correction (2026-07-26): train/serve sequence-length mismatch
 
 An audit flagged that this model trains and is configured at **512** tokens

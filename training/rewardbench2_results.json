@@ -1,0 +1,31 @@
+{
+  "benchmark": "RewardBench 2",
+  "dataset": "allenai/reward-bench-2 @ 7ff0885 (1,865 prompts, best-of-4)",
+  "harness": "allenai/reward-bench @ 05a9005 (rewardbench 0.1.5), scripts/run_v2.py unmodified",
+  "date": "2026-08-13",
+  "model": "DantheMan124/deberta-preference-reward (checkpoints/reward-lr2e5, 184M)",
+  "protocol": {
+    "device": "CPU (torch 2.13.0+cpu build; CUDA structurally absent)",
+    "encoding": "deberta_text_pair FastChat template - literal [SEP] assistant prefix, verified token-identical to the two-segment training encoding",
+    "max_length": 512,
+    "batch_size": 32,
+    "dtype": "float32",
+    "wall_clock": "1h18m"
+  },
+  "scores": {
+    "Factuality": 0.2884,
+    "Focus": 0.1576,
+    "Math": 0.4713,
+    "Precise IF": 0.2313,
+    "Safety": 0.3578,
+    "Ties": 0.0136
+  },
+  "average_unweighted_6_domain": 0.2533,
+  "reference_points": {
+    "random_baseline_accuracy_domains": 0.25,
+    "ties_uses_different_metric": true,
+    "OpenAssistant/reward-model-deberta-v3-large-v2 (435M, official leaderboard)": 0.32,
+    "best_leaderboard_seq_classifier (Skywork-V2-Llama-3.1-8B, paper)": 0.841
+  },
+  "reading": "Out of distribution the model is at the random floor overall (25.3 vs 25.0 random for the five accuracy domains). This is consistent with, and stronger evidence for, the model card's existing finding that it predicts UltraFeedback-style preferences and does not transfer. The official 435M OpenAssistant DeBERTa scores 32.0 on the same benchmark; encoder-class reward models as a category sit near the floor here, versus 61-84 for modern decoder classifiers. Bright spot: Math 47.1 vs OA's 50.3 at 40% of the parameters."
+}
