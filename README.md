@@ -18,8 +18,8 @@ flowchart TB
     D["Dashboard — Next.js + TypeScript<br/>suites · runs & results · costs · blind A/B rating room · run-vs-run compare"]
     A["API — FastAPI + Pydantic<br/>suites · prompt versioning · runs · results · ratings · compare"]
     R["Eval Runner — asyncio<br/>bounded concurrency · per-item failure isolation · cost & latency tracking"]
-    P["Providers (plugin)<br/>claude · openai · gemini · ollama"]
-    J["Judges (plugin)<br/>exact_match · llm_judge · deberta-hallucination (ours)"]
+    P["Providers (plugin)<br/>anthropic · openai · gemini · ollama"]
+    J["Judges (plugin)<br/>exact_match · llm_judge · deberta-hallucination (ours) · reward (ours)"]
     DB[("PostgreSQL<br/>SQLite fallback for zero-setup dev")]
     T["training/ — PyTorch package<br/>fine-tuned the DeBERTa judge"]
 
@@ -115,9 +115,9 @@ audit of the measurement protocol
 ([`training/scripts/diagnose_ragtruth_agreement.py`](training/scripts/diagnose_ragtruth_agreement.py))
 found the protocol itself is flawed: the judge encodes each example as
 `Q: … C: … A: …` and truncates at 512 tokens from the right, so on
-**102 of the 200 examples (51%) the ANSWER — the only thing being
+**101 of the 200 examples (50.5%) the ANSWER — the only thing being
 classified — is cut off entirely before the model sees it**, and on a
-further 30 (15%) it is partially cut. The number is arithmetically correct
+further 31 (15.5%) it is partially cut. The number is arithmetically correct
 under its stated protocol and should be read as a lower bound on a broken
 protocol, not as a clean measurement of the judge. Re-running with an
 answer-preserving encoding (truncate the context, keep question and answer
@@ -171,7 +171,7 @@ because the cloud rows it is compared against were measured under that
 protocol and were deliberately not re-run (no paid API calls). The comparison
 that matters after the fix is the table immediately above, not this one.
 
-Free and 43x faster, but not a drop-in replacement for a paid judge on
+Free and 44x faster than `gemini-2.5-flash-lite`, the fastest paid judge measured, but not a drop-in replacement for a paid judge on
 out-of-distribution data — its realistic role today is a cheap first-pass
 filter. Full methodology, training curves, and a candid **"what didn't
 work"** section (CUDA OOMs, a label-parsing bug that would have poisoned the
@@ -194,18 +194,20 @@ and wired into the platform as the `deberta-hallucination` judge
 
 ## Quality
 
-- **Tests:** 197 total — 95 backend (pytest, incl. a regression test
+- **Tests:** 211 total — 95 backend (pytest, incl. a regression test
   reproducing a real FastAPI `BackgroundTasks`/session-commit ordering bug
-  with two separate DB engines), 92 training (incl. a cross-package drift
+  with two separate DB engines), 106 training (incl. a cross-package drift
   guard that loads the platform's copy of the judge encoding from disk and
   asserts it is identical to the training copy), 10 frontend (vitest). Backend and dashboard are
   `ruff`/`mypy --strict` and `eslint`/`tsc` clean; the training package is
   `ruff` clean but its ML-heavy scripts (`train.py`, `evaluate.py`,
   `benchmark.py`) aren't run under `--strict` since third-party ML APIs
   (torch, HF schedulers, TensorBoard) don't type cleanly at that level.
-- **CI:** lint/type/test on every PR, plus an **eval gate** — a fixed prompt
-  suite runs against a pinned local model on every platform PR and fails the
-  build on score collapse. The platform gates its own CI with itself. The
+- **CI:** lint/type/test on every push to master and every PR (13 successful
+  runs), plus an **eval gate** — a fixed prompt suite against a pinned local
+  model, failing the build on score collapse, so the platform gates its own CI
+  with itself. The gate is wired to `pull_request` only and has **not yet
+  fired**: this repo's history is direct-to-master, so it has zero runs. The
   recorded baseline (0.375, measured against a real local `llama3.2`) is
   deliberately low: `exact_match` is a strict judge and a 3B model rambles —
   the gate exists to catch *regressions in the platform's plumbing*, not to
