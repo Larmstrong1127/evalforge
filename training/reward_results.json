@@ -1,0 +1,35 @@
+{
+  "_comment": "Pairwise accuracy for the preference reward model and its comparison points, on one split under one harness. Written so the baseline number stops living only in prose: every figure below is reproducible with the command recorded against it.",
+  "split": "UltraFeedback test_prefs",
+  "n_pairs_evaluated": 1987,
+  "n_pairs_loaded": 1988,
+  "n_dropped_identical_after_truncation": 1,
+  "max_length_tokens": 512,
+  "chance_floor": 0.5,
+  "device": "cpu",
+  "results": {
+    "ours_deberta_preference_reward": {
+      "params": "184M",
+      "pairwise_accuracy": 0.7026,
+      "calibration_temperature": 1.1668,
+      "checkpoint": "checkpoints/reward-lr2e5",
+      "command": "python eval_reward.py --checkpoint checkpoints/reward-lr2e5 --max-length 512",
+      "distribution": "in-distribution"
+    },
+    "openassistant_deberta_v3_large_v2": {
+      "params": "435M",
+      "pairwise_accuracy": 0.6009,
+      "model_id": "OpenAssistant/reward-model-deberta-v3-large-v2",
+      "command": "python eval_reward_baseline.py --batch-size 8",
+      "measured_at": "2026-08-17",
+      "distribution": "out-of-distribution for this model",
+      "note": "Re-run on CPU to produce this artifact after an audit found the figure existed only in prose. It reproduced the published 0.6009 exactly."
+    },
+    "ours_lr5e5_collapsed_run": {
+      "params": "184M",
+      "pairwise_accuracy": 0.5098,
+      "note": "A learning-rate sweep failure, retained as the reference point for what a collapsed run looks like on this split."
+    }
+  },
+  "reading": "The 10.2-point gap is in-distribution for our model and out-of-distribution for the baseline, so it is not a claim that a 184M model is better than a 435M one in general. It says the smaller model fits this preference distribution better than a strong public model transfers onto it. The out-of-distribution counterpart to this number is in rewardbench2_results.json, where our unweighted six-domain average is 25.3 -- the random floor."
+}

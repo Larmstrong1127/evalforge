@@ -69,6 +69,8 @@ after the truncation audit) run through the **same harness**
 | `OpenAssistant/reward-model-deberta-v3-large-v2` (public baseline) | 435M | 1,987 | 0.6009 |
 | lr 5e-5 run (collapsed, discarded) | 184M | 1,987 | 0.5098 |
 | **This model** — UltraFeedback `test_prefs` (in-distribution) | 184M | 1,987 | **0.7026** |
+
+_All three rows are committed as [`reward_results.json`](reward_results.json) with the command that produced each. The baseline row was re-measured on CPU on 2026-08-17 — after an audit found it existed only in prose — and reproduced 0.6009 exactly._
 | Human OOD probe (EvalForge rating room) | 184M | 15 | 0.4000 |
 
 ### Reading the baseline row honestly
