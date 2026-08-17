@@ -89,6 +89,11 @@ generalization gap — reported as the finding, not hidden:
 | lr-5e5 | **0.9942** | 0.4735 | 0.6163 |
 | lr-1e4 | 0.9937 | 0.4814 | 0.5766 |
 
+_The in-distribution F1 column verifies against the TensorBoard `metrics/val_f1`
+scalars. The RAGTruth OOD F1 and ECE columns are from the 2026-08-09 run and that
+evaluation's output was not persisted — they are reported here without a committed
+artifact behind them._
+
 Selecting by validation F1 alone would have shipped the *worst* real-world
 generalizer (`lr-5e5`) — the entire reason the design held RAGTruth out as
 an untouched evaluation set.
@@ -148,6 +153,12 @@ model cannot move their rows):
 | best achievable accuracy | 0.605 | 0.605 |
 | accuracy at the naive 0.5 threshold | 0.475 | 0.385 |
 | majority-class (all-faithful) baseline | 0.610 | 0.610 |
+
+_Caveat on the legacy column: its two score-grid cells (F1 at best accuracy 0.092,
+best achievable accuracy 0.605) were recomputed at re-run time and are not in the
+committed top-level `ragtruth_diagnostic.json`, whose legacy `best_accuracy` block
+instead reads accuracy 0.495 / F1 0.5388. Every other cell in that column verifies
+against the committed JSON._
 
 Read that honestly: **the fix buys ranking quality, not accuracy.** The
 model can now order examples by hallucination risk far better than chance
