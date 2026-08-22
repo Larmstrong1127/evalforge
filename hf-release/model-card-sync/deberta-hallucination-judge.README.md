@@ -1,0 +1,167 @@
+---
+license: mit
+base_model: microsoft/deberta-v3-base
+tags:
+  - text-classification
+  - hallucination-detection
+  - deberta-v2
+datasets:
+  - HaluEval
+  - RAGTruth
+metrics:
+  - f1
+  - precision
+  - recall
+pipeline_tag: text-classification
+---
+
+# DeBERTa Hallucination Judge
+
+Fine-tuned `microsoft/deberta-v3-base` binary classifier: given a
+`(question, context, answer)` triple, predicts whether the answer is
+**faithful** (label 0) or **hallucinated** (label 1) with respect to the
+context.
+
+Trained as part of [EvalForge](https://github.com/Larmstrong1127/evalforge),
+an open-source LLM evaluation platform, as a fast/free local alternative to
+LLM-as-judge for hallucination detection.
+
+## Intended use
+
+- **Primary:** a cheap, fast first-pass hallucination filter inside an
+  evaluation or RAG pipeline — score every `(question, context, answer)`
+  triple for free, resolve the confident cases, and escalate only the
+  uncertain middle to a stronger (paid) LLM judge.
+- **Out of scope:** a standalone verdict on arbitrary real-world content. As
+  the evaluation below shows, accuracy collapses on out-of-distribution
+  hallucinations, so it should not be the only judge on data unlike HaluEval.
+
+## Training data
+
+Fine-tuned on [HaluEval](https://github.com/RUCAIBox/HaluEval) (QA subset,
+~35K examples): synthetically generated faithful/hallucinated answer pairs
+for the same question and context. Trained via a hand-written PyTorch loop
+(AdamW, linear warmup+decay, mixed precision, gradient clipping, early
+stopping on validation F1) — see the
+[training code and full writeup](https://github.com/Larmstrong1127/evalforge/tree/master/training)
+for the complete methodology, including a three-run learning-rate sweep and
+a documented list of real bugs hit while training this model.
+
+## Evaluation — please read before using this model
+
+| Distribution | F1 | Precision | Recall | Expected Calibration Error |
+|---|---|---|---|---|
+| **In-distribution** (held-out HaluEval val) | 0.9937 | 0.999 | 0.989 | 0.0044 |
+| **Out-of-distribution** ([RAGTruth](https://github.com/ParticleMedia/RAGTruth), real RAG hallucinations, never seen in training) | **0.5067** | — | — | 0.4010 |
+
+**This is the headline finding, not a footnote.** In-distribution
+performance is excellent, but the model was trained only on HaluEval's
+*synthetically generated* hallucinations, which have a detectable stylistic
+signature (an LLM deliberately prompted to produce a plausible-but-wrong
+answer). That signature does not transfer to RAGTruth's real-world RAG
+failures — F1 drops to ~0.51 and calibration collapses (ECE 0.40) on
+genuinely out-of-distribution hallucinations.
+
+**Recommended use:** a cheap, fast first-pass filter (route confidently-
+faithful and confidently-hallucinated cases for free; send uncertain or
+out-of-domain cases to a stronger judge), not a standalone replacement for
+LLM-as-judge on arbitrary real-world content. A benchmark comparing this
+model against Claude/GPT-4o/Gemini-as-judge on cost, latency, and accuracy
+is in the [training README](https://github.com/Larmstrong1127/evalforge/tree/master/training#benchmark-local-judge-vs-llm-as-judge).
+
+## Limitations
+
+- **Does not generalize out-of-distribution.** F1 ≈ 0.51 and ECE ≈ 0.40 on
+  RAGTruth; it over-predicts "hallucinated" on real RAG failures.
+- **Learns a dataset artifact, not "hallucination" in general** — it keys on
+  HaluEval's synthetic-hallucination style, which real systems do not share.
+- **English QA only**, and capped at 512 tokens (longer contexts truncate).
+- **The 512-token cap silently removed the answer on long inputs — fixed in
+  serving on 2026-08-13.** Inputs were encoded as
+  `Q: {question} C: {context} A: {answer}` and truncated from the right, so
+  once question + context exceeded the window the answer — the span actually
+  being judged — was dropped before the model saw it. On the 200-example
+  RAGTruth benchmark sample this affected 50.5% of examples fully and a
+  further 15.5% partially (measured 2026-08-09 by
+  `training/scripts/diagnose_ragtruth_agreement.py`).
+  The exact 200-example sample, with the per-example truncation
+  accounting under both encodings, is published as
+  [`DantheMan124/ragtruth-diagnostic-200`](https://huggingface.co/datasets/DantheMan124/ragtruth-diagnostic-200).
+  **Fixed in serving on 2026-08-13; re-measured:** EvalForge now encodes
+  through a shared answer-preserving encoder that budgets the CONTEXT and
+  keeps question and answer whole, so the answer is fully deleted on 0/200
+  and partially deleted on 0/200 of the same sample. **The model weights are
+  unchanged** — this is an inference-time encoding fix, and inputs that
+  already fit inside the budget are encoded exactly as before. If you call
+  this checkpoint directly rather than through EvalForge, you must budget the
+  context yourself, or the task is unanswerable as posed; see
+  `evalforge/judges/hallucination_encoding.py` in the repo for a reference
+  implementation.
+- **Still no usable operating point on RAGTruth — the fix improved ranking,
+  not accuracy.** Re-measured 2026-08-13 on the identical sample (n=200,
+  seed 42, CPU, local judge only):
+
+  | | legacy encoding | answer-preserving (shipped) |
+  |---|---|---|
+  | ROC-AUC | 0.444 | 0.603 |
+  | F1 at the best-accuracy operating point | 0.092 | 0.615 |
+  | best F1 at any threshold | 0.566 | 0.627 |
+  | best achievable accuracy | 0.605 | 0.605 |
+  | accuracy at the naive 0.5 threshold | 0.475 | 0.385 |
+  | majority-class (all-faithful) baseline | 0.610 | 0.610 |
+
+  The gain is in RANKING quality: the model can now order examples by
+  hallucination risk meaningfully better than chance, and an F1 that was
+  effectively dead at the best-accuracy threshold (0.09) becomes usable
+  (0.61). It is **not** an accuracy gain. Best achievable accuracy is
+  unchanged at 60.5% and remains *below* the 61.0% all-faithful baseline,
+  and accuracy at a naive 0.5 cut is worse than before because the corrected
+  encoding compresses nearly every score above 0.99 (any deployment must
+  therefore tune its threshold on the empirical score distribution, not
+  assume 0.5).
+  **The prior guidance is re-evaluated and stands: treat RAGTruth-like
+  traffic as out-of-scope rather than as a lower-accuracy mode.** A
+  classifier that cannot beat "predict faithful for everything" has no
+  operating point worth deploying, however well it ranks. What the fix
+  changed is that this number now measures the model rather than a
+  measurement bug.
+- **Uncalibrated on real data** — do not treat its probabilities as reliable
+  confidences outside HaluEval-like inputs.
+
+## License
+
+MIT — same as the base model (`microsoft/deberta-v3-base`) and the EvalForge
+repository.
+
+## Usage
+
+```python
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained("DantheMan124/deberta-hallucination-judge")
+model = AutoModelForSequenceClassification.from_pretrained("DantheMan124/deberta-hallucination-judge")
+
+text = "Q: What is the capital of France? C: France is in Europe. A: Paris"
+inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+logits = model(**inputs).logits
+pred = logits.argmax(dim=-1).item()  # 0 = faithful, 1 = hallucinated
+```
+
+**This snippet is only safe while the whole triple fits in 512 tokens.**
+`truncation=True` cuts from the RIGHT, and the answer is on the right — with
+a real RAG context it is silently deleted before the model sees it (see
+Limitations). For anything longer, budget the context and keep the question
+and answer whole. EvalForge ships that as
+[`hallucination_encoding.encode_qca`](https://github.com/Larmstrong1127/evalforge/blob/master/platform/api/evalforge/judges/hallucination_encoding.py):
+
+```python
+from evalforge.judges.hallucination_encoding import encode_qca
+
+inputs = encode_qca(tokenizer, question, context, answer, 512, return_tensors="pt")
+```
+
+## Labels
+
+- `0`: faithful
+- `1`: hallucinated

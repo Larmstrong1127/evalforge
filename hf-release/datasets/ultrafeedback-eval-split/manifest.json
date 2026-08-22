@@ -1,0 +1,13 @@
+{
+  "dataset": "HuggingFaceH4/ultrafeedback_binarized",
+  "split": "test_prefs",
+  "tokenizer": "microsoft/deberta-v3-base",
+  "max_length": 512,
+  "n_pairs_loaded": 1988,
+  "n_pairs_kept": 1987,
+  "n_dropped_identical_after_truncation": 1,
+  "dropped_indices": [
+    1400
+  ],
+  "sha256": "9c392052da72518e908a93a5329f0430586675dd8ecbe3fb694bc5082f2f5ac6"
+}

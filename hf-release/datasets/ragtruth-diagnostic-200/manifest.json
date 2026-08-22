@@ -1,0 +1,21 @@
+{
+  "dataset": "wandb/RAGTruth-processed",
+  "split": "test",
+  "tokenizer": "microsoft/deberta-v3-base",
+  "max_length": 512,
+  "sample_size": 200,
+  "seed": 42,
+  "sampler": "random.Random(SEED).sample(examples, SAMPLE_SIZE)",
+  "n_source_examples": 2700,
+  "n_rows": 200,
+  "label_balance": {
+    "hallucinated_1": 78,
+    "faithful_0": 122
+  },
+  "n_truncated": 132,
+  "legacy_answer_fully_dropped": 101,
+  "legacy_answer_partially_dropped": 31,
+  "answer_preserving_answer_fully_dropped": 0,
+  "answer_preserving_answer_partially_dropped": 0,
+  "sha256": "db98a0226b28783daa88f9dd3407749e4e684ed96310eb63cf1a7ae6b571e5a6"
+}

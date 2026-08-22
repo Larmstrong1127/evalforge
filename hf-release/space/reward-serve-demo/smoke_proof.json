@@ -1,0 +1,14 @@
+{
+  "endpoint": "POST /gradio_api/call/score",
+  "model_repo": "<local checkpoint directory: reward-lr2e5>",
+  "model_loaded_before_first_request": false,
+  "model_loaded_after_first_request": true,
+  "prompt": "What causes seasons?",
+  "response_a": "Earth's axis is tilted about 23.5 degrees relative to its orbital plane, so each hemisphere receives sunlight at a steeper angle for part of the year.",
+  "response_b": "Because the Earth gets closer to the Sun in summer.",
+  "first_request_seconds_including_cold_model_load": 9.27,
+  "second_request_seconds_warm": 0.53,
+  "responses_identical_across_calls": true,
+  "result_markdown": "**Response A is preferred over Response B** with probability **0.740**.\n\n| Quantity | Value | What it means |\n|---|---:|---|\n| Raw score A | `-1.0902` | Meaningless alone -- arbitrary zero point |\n| Raw score B | `-2.3133` | Meaningless alone -- arbitrary zero point |\n| **Margin (A - B)** | **`+1.2231`** | The only quantity the model was trained on |\n| P(A preferred) | `0.7404` | `sigmoid(margin / T)`, T = 1.1668 |\n\n> The two raw scores are both often negative even when one answer is clearly good. That is not a bug: Bradley-Terry identifies rewards only up to an additive constant, so the sign carries no meaning. Subtract them, never read them.",
+  "passed": true
+}
